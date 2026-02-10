@@ -29,7 +29,12 @@ rec {
       };
     };
 
-  trotterLib = import ./lib.nix inputs;
+  libModule =
+    { lib, ... }:
+    {
+      options._trotter.lib = lib.mkOption { type = lib.types.attrs; };
+      config._trotter.lib = import __curPos.file inputs;
+    };
 
   loadDir =
     dir:
@@ -64,7 +69,7 @@ rec {
             && options.${type}.type.derivation.args ? ${argName}
             && options.${type}.type.derivation.args.${argName}.type ? step
           then
-            steps.${builtins.toString value}
+            steps.${builtins.toString value.step}
           else
             value
         );
@@ -72,6 +77,7 @@ rec {
       dream2nix.lib.evalModules {
         packageSets.nixpkgs = pkgs;
         modules = [
+          libModule
           {
             trotter.${type} = resolve args // {
               inherit id;
@@ -79,9 +85,6 @@ rec {
           }
           templates.${type}.module
         ];
-        specialArgs = {
-          inherit steps trotterLib;
-        };
       }
     );
 
@@ -89,9 +92,8 @@ rec {
     { templates }:
     (dream2nix.lib.evalModules {
       packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
-      modules = builtins.map (t: t.module) (builtins.attrValues templates);
+      modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
       raw = true;
-      specialArgs = { inherit trotterLib; };
     }).options.trotter
     |> builtins.mapAttrs (
       name: opt:
@@ -120,6 +122,19 @@ rec {
             type;
       }
     );
+
+  evalProjects =
+    { projects, stepDefs }:
+    builtins.mapAttrs (
+      _: proj:
+      proj
+      // {
+        steps = map (step: {
+          def = stepDefs.${toString step.id};
+          inherit (step) hidden sortKey;
+        }) proj.steps;
+      }
+    ) projects;
 
   mkFlake =
     let

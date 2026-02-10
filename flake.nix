@@ -27,10 +27,14 @@
         options.trotter = {
           stepDefs = top.lib.mkOption { type = top.lib.types.attrs; };
           templates = top.lib.mkOption { type = top.lib.types.attrs; };
+          projects = top.lib.mkOption { type = top.lib.types.attrs; };
         };
 
         config = {
-          flake.trotter.stepConfig = lib.evalStepConfig { inherit (top.config.trotter) templates; };
+          flake.trotter = {
+            stepConfig = lib.evalStepConfig { inherit (top.config.trotter) templates; };
+            projects = lib.evalProjects { inherit (top.config.trotter) projects stepDefs; };
+          };
           perSystem =
             { pkgs, ... }:
             {
