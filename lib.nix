@@ -4,8 +4,7 @@
   dream2nix,
   flake-parts,
 }:
-trotterLib:
-rec {
+trotterLib: rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
   libModule =
@@ -105,12 +104,13 @@ rec {
   evalProjects =
     { projects, stepDefs }:
     builtins.mapAttrs (
-      _: proj:
+      id: proj:
       proj
       // {
+        id = nixpkgs.lib.toIntBase10 id;
         steps = map (step: {
           def = stepDefs.${toString step.id};
-          inherit (step) hidden sortKey;
+          inherit (step) id hidden sortKey;
         }) proj.steps;
       }
     ) projects;
