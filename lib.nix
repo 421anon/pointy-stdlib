@@ -1,39 +1,18 @@
-inputs@{
+{
   self,
   nixpkgs,
   dream2nix,
   flake-parts,
 }:
+trotterLib:
 rec {
-  types.trotter.step =
-    allowedTypes: description:
-    (nixpkgs.lib.types.addCheck nixpkgs.lib.types.package (
-      pkg: nixpkgs.lib.lists.any (t: pkg.meta.trotter.type == t) allowedTypes
-    ))
-    // {
-      description = {
-        type.step = { inherit allowedTypes; };
-        inherit description;
-        __toString = _: "TStep [" + builtins.toString allowedTypes + "]";
-      };
-    };
-
-  types.stringWithDescription =
-    description:
-    nixpkgs.lib.types.str
-    // {
-      description = {
-        type.string = { };
-        inherit description;
-        __toString = _: "TString";
-      };
-    };
+  types = import ./lib/types.nix { inherit nixpkgs; };
 
   libModule =
     { lib, ... }:
     {
-      options._trotter.lib = lib.mkOption { type = lib.types.attrs; };
-      config._trotter.lib = import __curPos.file inputs;
+      options._trotter.lib = nixpkgs.lib.mkOption { type = lib.types.attrs; };
+      config._trotter.lib = trotterLib;
     };
 
   loadDir =

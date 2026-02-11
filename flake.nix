@@ -20,20 +20,23 @@
       dream2nix,
       flake-parts,
     }:
-    rec {
-      lib = import ./lib.nix inputs;
+    let
+      trotterLib = import ./lib.nix inputs trotterLib;
+    in
+    {
+      lib = trotterLib;
 
       flakeModules.default = top: {
         options.trotter = {
-          stepDefs = top.lib.mkOption { type = top.lib.types.attrs; };
-          templates = top.lib.mkOption { type = top.lib.types.attrs; };
-          projects = top.lib.mkOption { type = top.lib.types.attrs; };
+          stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.stepDef; };
+          templates = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.template; };
+          projects = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.project; };
         };
 
         config = {
           flake.trotter = {
-            stepConfig = lib.evalStepConfig { inherit (top.config.trotter) templates; };
-            projects = lib.evalProjects { inherit (top.config.trotter) projects stepDefs; };
+            stepConfig = trotterLib.evalStepConfig { inherit (top.config.trotter) templates; };
+            projects = trotterLib.evalProjects { inherit (top.config.trotter) projects stepDefs; };
           };
           perSystem =
             { pkgs, ... }:
@@ -44,7 +47,7 @@
                   name = "steps";
                 }
                 // {
-                  steps = lib.evalSteps {
+                  steps = trotterLib.evalSteps {
                     inherit pkgs;
                     inherit (top.config.trotter) stepDefs templates;
                   };
