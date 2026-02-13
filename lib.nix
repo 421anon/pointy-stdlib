@@ -32,7 +32,16 @@ trotterLib: rec {
     }:
     let
       steps = evalSteps args;
-      options = evalStepConfig { inherit templates; };
+      stepConfig = evalStepConfig { inherit templates; };
+      mkStoreReference =
+        hash:
+        pkgs.stdenv.mkDerivation {
+          name = "store-ref";
+          outputHashAlgo = "sha256";
+          outputHashMode = "recursive";
+          outputHash = hash;
+          builder = pkgs.writeScript "fail" "exit 1";
+        };
     in
     stepDefs
     |> builtins.mapAttrs (
@@ -42,12 +51,14 @@ trotterLib: rec {
         resolve = builtins.mapAttrs (
           argName: value:
           if
-            options ? ${type}
-            && options.${type}.type ? derivation
-            && options.${type}.type.derivation.args ? ${argName}
-            && options.${type}.type.derivation.args.${argName}.type ? step
+            stepConfig ? ${type}
+            && stepConfig.${type}.type ? derivation
+            && stepConfig.${type}.type.derivation.args ? ${argName}
+            && stepConfig.${type}.type.derivation.args.${argName}.type ? step
           then
             steps.${builtins.toString value.step}
+          else if stepConfig ? ${type} && stepConfig.${type}.type ? fileUpload && argName == "uploaded" then
+            mkStoreReference value.hash
           else
             value
         );
