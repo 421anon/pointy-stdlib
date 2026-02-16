@@ -29,6 +29,7 @@ trotterLib: rec {
       stepDefs,
       templates,
       pkgs,
+      ...
     }:
     let
       steps = evalSteps args;
@@ -113,7 +114,7 @@ trotterLib: rec {
     );
 
   evalProjects =
-    { projects, stepDefs }:
+    { projects, stepDefs, ... }:
     builtins.mapAttrs (
       id: proj:
       proj
@@ -124,6 +125,33 @@ trotterLib: rec {
           inherit (step) id hidden sortKey;
         }) proj.steps;
       }
+    ) projects;
+
+  evalProjectOutPaths =
+    args@{
+      pkgs,
+      projects,
+      stepDefs,
+      templates,
+    }:
+    let
+      projects = evalProjects args;
+      steps = evalSteps args;
+    in
+    builtins.mapAttrs (
+      _: proj:
+      builtins.listToAttrs
+      <| map (
+        step:
+        let
+          id = toString step.id;
+        in
+        {
+          name = id;
+          value = steps.${id}.outPath;
+        }
+      ) proj.steps
+
     ) projects;
 
   mkFlake =

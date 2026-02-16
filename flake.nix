@@ -51,6 +51,10 @@
                     inherit pkgs;
                     inherit (top.config.trotter) stepDefs templates;
                   };
+                  projectOutPaths = trotterLib.evalProjectOutPaths {
+                    inherit pkgs;
+                    inherit (top.config.trotter) projects stepDefs templates;
+                  };
                 };
               };
             };
