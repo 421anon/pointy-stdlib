@@ -79,7 +79,7 @@ trotterLib: rec {
     );
 
   evalStepConfig =
-    { templates }:
+    { templates, ... }:
     (dream2nix.lib.evalModules {
       packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
       modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
@@ -133,6 +133,7 @@ trotterLib: rec {
       projects,
       stepDefs,
       templates,
+      ...
     }:
     let
       projects = evalProjects args;
