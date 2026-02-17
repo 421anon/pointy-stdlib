@@ -41,18 +41,18 @@
             };
           in
           {
-            flake.trotter = {
-              stepConfig = trotterLib.evalStepConfig cfg;
-              projects = trotterLib.evalProjects cfg;
-              inherit (cfg) stepDefs;
+            flake.trotter = with trotterLib; {
+              stepConfig = evalStepConfig cfg;
+              projects = evalProjects cfg;
+              stepDefs = evalStepDefs cfg;
             };
             perSystem =
               { pkgs, ... }:
               {
                 packages = {
-                  trotter = fakeDrv // {
-                    steps = trotterLib.evalSteps <| cfg // { inherit pkgs; };
-                    projectOutPaths = trotterLib.evalProjectOutPaths <| cfg // { inherit pkgs; };
+                  trotter = with trotterLib; fakeDrv // {
+                    steps = evalSteps <| cfg // { inherit pkgs; };
+                    projectOutPaths = evalProjectOutPaths <| cfg // { inherit pkgs; };
                   };
                 };
               };

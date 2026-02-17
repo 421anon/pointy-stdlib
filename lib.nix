@@ -127,6 +127,10 @@ trotterLib: rec {
       }
     ) projects;
 
+  evalStepDefs =
+    { stepDefs, ... }:
+    builtins.mapAttrs (id: stepDef: stepDef // { id = nixpkgs.lib.toIntBase10 id; }) stepDefs;
+
   evalProjectOutPaths =
     args@{
       pkgs,
