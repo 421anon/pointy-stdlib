@@ -152,7 +152,7 @@ trotterLib: rec {
       <| map (
         step:
         let
-          id = toString step.id;
+          id = toString step.def.id;
         in
         {
           name = id;
