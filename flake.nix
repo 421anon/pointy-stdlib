@@ -32,32 +32,31 @@
           projects = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.project; };
         };
 
-        config = {
-          flake.trotter = {
-            stepConfig = trotterLib.evalStepConfig { inherit (top.config.trotter) templates; };
-            projects = trotterLib.evalProjects { inherit (top.config.trotter) projects stepDefs; };
-          };
-          perSystem =
-            { pkgs, ... }:
-            {
-              packages = {
-                trotter = {
-                  type = "derivation";
-                  name = "steps";
-                }
-                // {
-                  steps = trotterLib.evalSteps {
-                    inherit pkgs;
-                    inherit (top.config.trotter) stepDefs templates;
-                  };
-                  projectOutPaths = trotterLib.evalProjectOutPaths {
-                    inherit pkgs;
-                    inherit (top.config.trotter) projects stepDefs templates;
+        config =
+          let
+            cfg = top.config.trotter;
+            fakeDrv = {
+              type = "derivation";
+              name = "";
+            };
+          in
+          {
+            flake.trotter = {
+              stepConfig = trotterLib.evalStepConfig cfg;
+              projects = trotterLib.evalProjects cfg;
+              inherit (cfg) stepDefs;
+            };
+            perSystem =
+              { pkgs, ... }:
+              {
+                packages = {
+                  trotter = fakeDrv // {
+                    steps = trotterLib.evalSteps <| cfg // { inherit pkgs; };
+                    projectOutPaths = trotterLib.evalProjectOutPaths <| cfg // { inherit pkgs; };
                   };
                 };
               };
-            };
-        };
+          };
       };
     };
 }
