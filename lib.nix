@@ -114,7 +114,10 @@ trotterLib: rec {
     );
 
   evalProjects =
-    { projects, stepDefs, ... }:
+    args@{ projects, ... }:
+    let
+      stepDefs = evalStepDefs args;
+    in
     builtins.mapAttrs (
       id: proj:
       proj
@@ -122,7 +125,7 @@ trotterLib: rec {
         id = nixpkgs.lib.toIntBase10 id;
         steps = map (step: {
           def = stepDefs.${toString step.id};
-          inherit (step) id hidden sortKey;
+          inherit (step) hidden sortKey;
         }) proj.steps;
       }
     ) projects;
