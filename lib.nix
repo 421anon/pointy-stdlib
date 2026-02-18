@@ -156,7 +156,11 @@ trotterLib: rec {
         in
         {
           name = id;
-          value = steps.${id}.outPath;
+          value =
+            let
+              tr = builtins.tryEval steps.${id}.outPath;
+            in
+            if tr.success then tr.value else "/invalid";
         }
       ) proj.steps
 
