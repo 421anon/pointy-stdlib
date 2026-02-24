@@ -74,6 +74,11 @@ trotterLib: rec {
             };
           }
           templates.${type}.module
+
+          {
+            options._trotter.steps = nixpkgs.lib.mkOption { type = nixpkgs.lib.types.attrs; };
+            config._trotter.steps = steps;
+          }
         ];
       }
     );
