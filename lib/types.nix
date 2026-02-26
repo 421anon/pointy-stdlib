@@ -9,18 +9,32 @@ with types;
       description = {
         type.step = { inherit allowedTypes; };
         inherit description;
-        __toString = _: "TStep [" + builtins.toString allowedTypes + "]";
+        __toString = _: "TStep [" + builtins.toString allowedTypes + "]"; # for evaluation error messages
+      };
+    };
+
+  trotter.listOf =
+    inner:
+    listOf inner
+    // {
+      description = {
+        type.list = inner.description.type;
+        description = "List of " + inner.description.description;
+        __toString = _: "TList(" + builtins.toString inner.description + ")";
       };
     };
 
   trotter.string =
-    description:
+    {
+      description,
+      display ? { },
+    }:
     str
     // {
       description = {
-        type.string = { };
+        type.string = { inherit display; };
         inherit description;
-        __toString = _: "TString";
+        __toString = _: "TString"; # for evaluation error messages
       };
     };
 
