@@ -3,13 +3,21 @@ with nixpkgs.lib;
 with types;
 {
   trotter.step =
-    allowedTypes: description:
-    (addCheck package (pkg: lists.any (t: pkg.meta.trotter.type == t) allowedTypes))
+    {
+      description,
+      allowedTypes ? null,
+    }:
+    (addCheck package (
+      pkg:
+      hasAttrByPath [ "meta" "trotter" "type" ] pkg
+      && (allowedTypes == null || elem pkg.meta.trotter.type allowedTypes)
+    ))
     // {
       description = {
-        type.step = { inherit allowedTypes; };
+        type.step = optionalAttrs (allowedTypes != null) { inherit allowedTypes; };
         inherit description;
-        __toString = _: "TStep [" + builtins.toString allowedTypes + "]"; # for evaluation error messages
+        __toString =
+          _: "TStep" + optionalString (allowedTypes != null) "[${builtins.toString allowedTypes}]";
       };
     };
 
