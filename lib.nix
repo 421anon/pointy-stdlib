@@ -49,15 +49,23 @@ trotterLib: rec {
       id:
       { type, args, ... }:
       let
+        resolveArg =
+          argType: value:
+          if argType ? step then
+            steps.${builtins.toString value.step}
+          else if argType ? list && argType.list ? step then
+            builtins.map (stepRef: steps.${builtins.toString stepRef.step}) value
+          else
+            value;
+
         resolve = builtins.mapAttrs (
           argName: value:
           if
             stepConfig ? ${type}
             && stepConfig.${type}.type ? derivation
             && stepConfig.${type}.type.derivation.args ? ${argName}
-            && stepConfig.${type}.type.derivation.args.${argName}.type ? step
           then
-            steps.${builtins.toString value.step}
+            resolveArg stepConfig.${type}.type.derivation.args.${argName}.type value
           else if stepConfig ? ${type} && stepConfig.${type}.type ? fileUpload && argName == "uploaded" then
             mkStoreReference value.hash
           else
