@@ -29,6 +29,7 @@ trotterLib: rec {
       stepDefs,
       templates,
       pkgs,
+      userPkgs ? { },
       ...
     }:
     let
@@ -86,6 +87,12 @@ trotterLib: rec {
           {
             options._trotter.steps = nixpkgs.lib.mkOption { type = nixpkgs.lib.types.attrs; };
             config._trotter.steps = steps;
+
+            options.trotter.userPkgs = nixpkgs.lib.mkOption {
+              type = nixpkgs.lib.types.lazyAttrsOf nixpkgs.lib.types.raw;
+              default = { };
+            };
+            config.trotter.userPkgs = userPkgs;
           }
         ];
       }

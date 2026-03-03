@@ -47,12 +47,35 @@
               stepDefs = evalStepDefs cfg;
             };
             perSystem =
-              { pkgs, ... }:
+              { pkgs, config, ... }:
               {
-                packages = {
-                  trotter = with trotterLib; fakeDrv // {
-                    steps = evalSteps <| cfg // { inherit pkgs; };
-                    projectOutPaths = evalProjectOutPaths <| cfg // { inherit pkgs; };
+                options.trotter.userPkgs = top.lib.mkOption {
+                  type = top.lib.types.lazyAttrsOf top.lib.types.raw;
+                  default = { };
+                };
+                config = {
+                  packages = {
+                    trotter =
+                      with trotterLib;
+                      fakeDrv
+                      // {
+                        steps =
+                          evalSteps
+                          <|
+                            cfg
+                            // {
+                              inherit pkgs;
+                              userPkgs = config.trotter.userPkgs;
+                            };
+                        projectOutPaths =
+                          evalProjectOutPaths
+                          <|
+                            cfg
+                            // {
+                              inherit pkgs;
+                              userPkgs = config.trotter.userPkgs;
+                            };
+                      };
                   };
                 };
               };
