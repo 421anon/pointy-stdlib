@@ -30,6 +30,7 @@
           stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.stepDef; };
           templates = top.lib.mkOption { type = top.lib.types.attrs; };
           projects = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.project; };
+          srcFiles = top.lib.mkOption { type = top.lib.types.raw; };
         };
 
         config =

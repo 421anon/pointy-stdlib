@@ -14,6 +14,12 @@ trotterLib: rec {
       config._trotter.lib = trotterLib;
     };
 
+  userPkgsModule = {
+    options.trotter.userPkgs = nixpkgs.lib.mkOption {
+      type = nixpkgs.lib.types.lazyAttrsOf nixpkgs.lib.types.raw;
+    };
+  };
+
   loadDir =
     dir:
     builtins.readDir dir
@@ -30,6 +36,7 @@ trotterLib: rec {
       templates,
       pkgs,
       userPkgs ? { },
+      srcFiles,
       ...
     }:
     let
@@ -72,28 +79,33 @@ trotterLib: rec {
           else
             value
         );
+
+        withSrcFiles =
+          stepConfig ? ${type}
+          && stepConfig.${type}.type ? derivation
+          && stepConfig.${type}.type.derivation.withSrcFiles or false;
+
       in
       dream2nix.lib.evalModules {
         packageSets.nixpkgs = pkgs;
         modules = [
           libModule
+          userPkgsModule
+          { config.trotter.userPkgs = userPkgs; }
+          templates.${type}.module
           {
             trotter.${type} = resolve args // {
               inherit id;
             };
           }
-          templates.${type}.module
-
-          {
-            options._trotter.steps = nixpkgs.lib.mkOption { type = nixpkgs.lib.types.attrs; };
-            config._trotter.steps = steps;
-
-            options.trotter.userPkgs = nixpkgs.lib.mkOption {
-              type = nixpkgs.lib.types.lazyAttrsOf nixpkgs.lib.types.raw;
-              default = { };
-            };
-            config.trotter.userPkgs = userPkgs;
-          }
+        ]
+        ++ nixpkgs.lib.optionals withSrcFiles [
+          (
+            { lib, ... }:
+            {
+              mkDerivation.unpackPhase = "ln -s ${srcFiles}/${id}/* .";
+            }
+          )
         ];
       }
     );
