@@ -46,9 +46,16 @@
               stepConfig = evalStepConfig cfg;
               projects = evalProjects cfg;
               stepDefs = evalStepDefs cfg;
+              srcFiles = cfg.srcFiles;
             };
             perSystem =
               { pkgs, config, ... }:
+              let
+                allPkgs = {
+                  inherit pkgs;
+                  userPkgs = config.trotter.userPkgs;
+                };
+              in
               {
                 options.trotter.userPkgs = top.lib.mkOption {
                   type = top.lib.types.lazyAttrsOf top.lib.types.raw;
@@ -60,22 +67,8 @@
                       with trotterLib;
                       fakeDrv
                       // {
-                        steps =
-                          evalSteps
-                          <|
-                            cfg
-                            // {
-                              inherit pkgs;
-                              userPkgs = config.trotter.userPkgs;
-                            };
-                        projectOutPaths =
-                          evalProjectOutPaths
-                          <|
-                            cfg
-                            // {
-                              inherit pkgs;
-                              userPkgs = config.trotter.userPkgs;
-                            };
+                        steps = evalSteps <| cfg // allPkgs;
+                        projectOutPaths = evalProjectOutPaths <| cfg // allPkgs;
                       };
                   };
                 };
