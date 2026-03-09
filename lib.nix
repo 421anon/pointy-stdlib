@@ -100,12 +100,9 @@ trotterLib: rec {
           }
         ]
         ++ nixpkgs.lib.optionals withSrcFiles [
-          (
-            { lib, ... }:
-            {
-              mkDerivation.unpackPhase = "ln -s ${srcFiles}/${id}/* .";
-            }
-          )
+          {
+            mkDerivation.unpackPhase = "if [ -d ${srcFiles}/${id} ]; then find ${srcFiles}/${id} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .; fi";
+          }
         ];
       }
     );
