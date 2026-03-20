@@ -14,12 +14,6 @@ trotterLib: rec {
       config._trotter.lib = trotterLib;
     };
 
-  userPkgsModule = {
-    options.trotter.userPkgs = nixpkgs.lib.mkOption {
-      type = nixpkgs.lib.types.lazyAttrsOf nixpkgs.lib.types.raw;
-    };
-  };
-
   loadDir =
     dir:
     builtins.readDir dir
@@ -35,7 +29,6 @@ trotterLib: rec {
       stepDefs,
       templates,
       pkgs,
-      userPkgs ? { },
       srcFiles,
       ...
     }:
@@ -90,8 +83,6 @@ trotterLib: rec {
         packageSets.nixpkgs = pkgs;
         modules = [
           libModule
-          userPkgsModule
-          { config.trotter.userPkgs = userPkgs; }
           templates.${type}.module
           {
             trotter.${type} = resolve args // {

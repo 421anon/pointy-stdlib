@@ -49,26 +49,16 @@
               srcFiles = cfg.srcFiles;
             };
             perSystem =
-              { pkgs, config, ... }:
-              let
-                allPkgs = {
-                  inherit pkgs;
-                  userPkgs = config.trotter.userPkgs;
-                };
-              in
+              { pkgs, ... }:
               {
-                options.trotter.userPkgs = top.lib.mkOption {
-                  type = top.lib.types.lazyAttrsOf top.lib.types.raw;
-                  default = { };
-                };
                 config = {
                   packages = {
                     trotter =
                       with trotterLib;
                       fakeDrv
                       // {
-                        steps = evalSteps <| cfg // allPkgs;
-                        projectOutPaths = evalProjectOutPaths <| cfg // allPkgs;
+                        steps = evalSteps <| cfg // { inherit pkgs; };
+                        projectOutPaths = evalProjectOutPaths <| cfg // { inherit pkgs; };
                       };
                   };
                 };
