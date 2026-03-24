@@ -46,24 +46,6 @@ with types;
       };
     };
 
-  trotter.record =
-    fields:
-    (submodule {
-      options = mapAttrs (_: fieldType: mkOption { type = fieldType; }) fields;
-    })
-    // {
-      description = {
-        type.record = {
-          fields = mapAttrs (_: fieldType: {
-            inherit (fieldType.description) description;
-            type = fieldType.description.type;
-          }) fields;
-        };
-        description = "Record with fields: " + concatStringsSep ", " (attrNames fields);
-        __toString = _: "TRecord";
-      };
-    };
-
   trotter.stepDef = submodule {
     options = {
       type = mkOption { type = str; };
