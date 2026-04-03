@@ -73,10 +73,13 @@ trotterLib: rec {
             value
         );
 
-        withSrcFiles =
+        srcDir = srcFiles + "/${id}";
+
+        hasSrcDir =
           stepConfig ? ${type}
           && stepConfig.${type}.type ? derivation
-          && stepConfig.${type}.type.derivation.withSrcFiles or false;
+          && (stepConfig.${type}.type.derivation.withSrcFiles or false)
+          && builtins.pathExists srcDir;
 
       in
       dream2nix.lib.evalModules {
@@ -90,9 +93,9 @@ trotterLib: rec {
             };
           }
         ]
-        ++ nixpkgs.lib.optionals withSrcFiles [
+        ++ nixpkgs.lib.optionals hasSrcDir [
           {
-            mkDerivation.unpackPhase = "if [ -d ${srcFiles}/${id} ]; then find ${srcFiles}/${id} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .; fi";
+            mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
           }
         ];
       }
