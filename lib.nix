@@ -101,7 +101,7 @@ trotterLib: rec {
               }
             ]
           else
-            { mkDerivation.dontUnpack = true; }
+            [ { mkDerivation.dontUnpack = true; } ]
         );
       }
     );
