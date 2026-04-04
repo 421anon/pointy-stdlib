@@ -93,11 +93,16 @@ trotterLib: rec {
             };
           }
         ]
-        ++ nixpkgs.lib.optionals hasSrcDir [
-          {
-            mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
-          }
-        ];
+        ++ (
+          if hasSrcDir then
+            [
+              {
+                mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
+              }
+            ]
+          else
+            { mkDerivation.dontUnpack = true; }
+        );
       }
     );
 
