@@ -47,6 +47,7 @@
               projects = evalProjects cfg;
               stepDefs = evalStepDefs cfg;
               srcFiles = cfg.srcFiles;
+              dependencies = evalDependencies cfg;
             };
             perSystem =
               { pkgs, ... }:

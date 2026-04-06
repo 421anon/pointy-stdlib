@@ -7,6 +7,10 @@
 trotterLib: rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
+  stepIdFromRef = stepRef: builtins.toString stepRef.step;
+  isStepArg = argType: argType ? step;
+  isStepListArg = argType: argType ? list && argType.list ? step;
+
   libModule =
     { lib, ... }:
     {
@@ -52,10 +56,10 @@ trotterLib: rec {
       let
         resolveArg =
           argType: value:
-          if argType ? step then
-            steps.${builtins.toString value.step}
-          else if argType ? list && argType.list ? step then
-            builtins.map (stepRef: steps.${builtins.toString stepRef.step}) value
+          if isStepArg argType then
+            steps.${stepIdFromRef value}
+          else if isStepListArg argType then
+            builtins.map (stepRef: steps.${stepIdFromRef stepRef}) value
           else
             value;
 
@@ -193,6 +197,97 @@ trotterLib: rec {
       ) proj.steps
 
     ) projects;
+
+  evalDependencies =
+    { stepDefs, templates, ... }:
+    let
+      stepConfig = evalStepConfig { inherit templates; };
+
+      getDepIds =
+        argType: value:
+        if isStepArg argType then
+          [ (stepIdFromRef value) ]
+        else if isStepListArg argType then
+          builtins.map stepIdFromRef value
+        else
+          [ ];
+
+      directDepsOf =
+        id:
+        let
+          stepDef = stepDefs.${id};
+          sc = stepConfig.${stepDef.type} or null;
+        in
+        if sc != null && sc.type ? derivation then
+          builtins.concatLists (
+            builtins.attrValues (
+              builtins.mapAttrs (
+                argName: value:
+                if sc.type.derivation.args ? ${argName} then
+                  getDepIds sc.type.derivation.args.${argName}.type value
+                else
+                  [ ]
+              ) stepDef.args
+            )
+          )
+        else
+          [ ];
+
+      visit =
+        depId: visited:
+        if builtins.elem depId visited then
+          {
+            result = [ ];
+            visited = visited;
+          }
+        else
+          let
+            deps = directDepsOf depId;
+            newVisited = visited ++ [ depId ];
+            afterDeps =
+              builtins.foldl'
+                (
+                  acc: d:
+                  let
+                    sub = visit d acc.visited;
+                  in
+                  {
+                    result = acc.result ++ sub.result;
+                    visited = sub.visited;
+                  }
+                )
+                {
+                  result = [ ];
+                  visited = newVisited;
+                }
+                deps;
+          in
+          {
+            result = afterDeps.result ++ [ depId ];
+            visited = afterDeps.visited;
+          };
+
+      transitiveDepsOf =
+        id:
+        (builtins.foldl'
+          (
+            acc: dep:
+            let
+              sub = visit dep acc.visited;
+            in
+            {
+              result = acc.result ++ sub.result;
+              visited = sub.visited;
+            }
+          )
+          {
+            result = [ ];
+            visited = [ id ];
+          }
+          (directDepsOf id)
+        ).result;
+    in
+    builtins.mapAttrs (id: _: transitiveDepsOf id) stepDefs;
 
   mkFlake =
     let
