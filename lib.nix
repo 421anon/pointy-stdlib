@@ -88,6 +88,7 @@ trotterLib: rec {
       in
       dream2nix.lib.evalModules {
         packageSets.nixpkgs = pkgs;
+        specialArgs = { inherit pkgs; };
         modules = [
           libModule
           templates.${type}.module
