@@ -20,29 +20,29 @@
       flake-parts,
     }:
     let
-      trotterLib = import ./lib.nix inputs trotterLib;
+      pointyLib = import ./lib.nix inputs pointyLib;
     in
     {
-      lib = trotterLib;
+      lib = pointyLib;
 
       flakeModules.default = top: {
-        options.trotter = {
-          stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.stepDef; };
+        options.pointy = {
+          stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.stepDef; };
           templates = top.lib.mkOption { type = top.lib.types.attrs; };
-          projects = top.lib.mkOption { type = top.lib.types.attrsOf trotterLib.types.trotter.project; };
+          projects = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.project; };
           srcFiles = top.lib.mkOption { type = top.lib.types.raw; };
         };
 
         config =
           let
-            cfg = top.config.trotter;
+            cfg = top.config.pointy;
             fakeDrv = {
               type = "derivation";
               name = "";
             };
           in
           {
-            flake.trotter = with trotterLib; {
+            flake.pointy = with pointyLib; {
               stepConfig = evalStepConfig cfg;
               projects = evalProjects cfg;
               stepDefs = evalStepDefs cfg;
@@ -54,8 +54,8 @@
               {
                 config = {
                   packages = {
-                    trotter =
-                      with trotterLib;
+                    pointy =
+                      with pointyLib;
                       fakeDrv
                       // {
                         steps = evalSteps <| cfg // { inherit pkgs; };

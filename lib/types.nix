@@ -2,15 +2,15 @@
 with nixpkgs.lib;
 with types;
 {
-  trotter.step =
+  pointy.step =
     {
       description,
       allowedTypes ? null,
     }:
     (addCheck package (
       pkg:
-      hasAttrByPath [ "meta" "trotter" "type" ] pkg
-      && (allowedTypes == null || elem pkg.meta.trotter.type allowedTypes)
+      hasAttrByPath [ "meta" "pointy" "type" ] pkg
+      && (allowedTypes == null || elem pkg.meta.pointy.type allowedTypes)
     ))
     // {
       description = {
@@ -21,7 +21,7 @@ with types;
       };
     };
 
-  trotter.listOf =
+  pointy.listOf =
     inner:
     listOf inner
     // {
@@ -32,7 +32,7 @@ with types;
       };
     };
 
-  trotter.string =
+  pointy.string =
     {
       description,
       display ? { },
@@ -46,7 +46,7 @@ with types;
       };
     };
 
-  trotter.stepDef = submodule {
+  pointy.stepDef = submodule {
     options = {
       type = mkOption { type = str; };
       name = mkOption { type = str; };
@@ -54,7 +54,7 @@ with types;
     };
   };
 
-  trotter.template =
+  pointy.template =
     let
       derivationType = submodule {
         options = {
@@ -78,7 +78,7 @@ with types;
     in
     submodule {
       options = {
-        trotter.type = mkOption {
+        pointy.type = mkOption {
           type = oneOf [
             derivationType
             fileUploadType
@@ -89,7 +89,7 @@ with types;
       };
     };
 
-  trotter.project = submodule {
+  pointy.project = submodule {
     options = {
       name = mkOption { type = str; };
       hidden = mkOption { type = bool; };

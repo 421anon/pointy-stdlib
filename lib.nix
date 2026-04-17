@@ -4,7 +4,7 @@
   dream2nix,
   flake-parts,
 }:
-trotterLib: rec {
+pointyLib: rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
@@ -14,8 +14,8 @@ trotterLib: rec {
   libModule =
     { lib, ... }:
     {
-      options._trotter.lib = nixpkgs.lib.mkOption { type = lib.types.attrs; };
-      config._trotter.lib = trotterLib;
+      options._pointy.lib = nixpkgs.lib.mkOption { type = lib.types.attrs; };
+      config._pointy.lib = pointyLib;
     };
 
   loadDir =
@@ -93,7 +93,7 @@ trotterLib: rec {
           libModule
           templates.${type}.module
           {
-            trotter.${type} = resolve args // {
+            pointy.${type} = resolve args // {
               inherit id;
             };
           }
@@ -117,11 +117,11 @@ trotterLib: rec {
       packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
       modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
       raw = true;
-    }).options.trotter
+    }).options.pointy
     |> builtins.mapAttrs (
       name: opt:
       let
-        type = templates.${name}.trotter.type;
+        type = templates.${name}.pointy.type;
       in
       {
         type =
