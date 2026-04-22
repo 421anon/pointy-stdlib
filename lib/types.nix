@@ -50,6 +50,10 @@ with types;
     options = {
       type = mkOption { type = str; };
       name = mkOption { type = str; };
+      note = mkOption {
+        type = str;
+        default = "";
+      };
       args = mkOption { type = attrs; };
     };
   };
