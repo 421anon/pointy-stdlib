@@ -28,7 +28,7 @@ with types;
     // {
       description = {
         type.list = inner.description.type;
-        description = "List of " + inner.description.description;
+        description = "List of " + toLower inner.description.description;
         displayName = inner.description.displayName or null;
         __toString = _: "TList(" + builtins.toString inner.description + ")";
       };
