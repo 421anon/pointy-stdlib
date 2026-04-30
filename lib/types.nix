@@ -67,14 +67,6 @@ with types;
           derivation = mkOption {
             type = submodule {
               options = {
-                displayName = mkOption {
-                  type = nullOr str;
-                  default = null;
-                };
-                description = mkOption {
-                  type = nullOr str;
-                  default = null;
-                };
                 withSrcFiles = mkOption {
                   type = bool;
                   default = false;
@@ -92,14 +84,6 @@ with types;
             type = submodule {
               options = {
                 allowedExtensions = mkOption { type = listOf str; };
-                displayName = mkOption {
-                  type = nullOr str;
-                  default = null;
-                };
-                description = mkOption {
-                  type = nullOr str;
-                  default = null;
-                };
               };
             };
           };
@@ -109,6 +93,18 @@ with types;
     in
     submodule {
       options = {
+        sortKey = mkOption {
+          type = nullOr int;
+          default = null;
+        };
+        displayName = mkOption {
+          type = nullOr str;
+          default = null;
+        };
+        description = mkOption {
+          type = nullOr str;
+          default = null;
+        };
         pointy.type = mkOption {
           type = oneOf [
             derivationType

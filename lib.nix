@@ -123,22 +123,15 @@ pointyLib: rec {
       let
         template = templates.${name};
         type = template.pointy.type;
-        sortKey = template.sortKey or null;
-        meta =
-          if type ? derivation then
-            { displayName = type.derivation.displayName or null; description = type.derivation.description or null; }
-          else if type ? fileUpload then
-            { displayName = type.fileUpload.displayName or null; description = type.fileUpload.description or null; }
-          else
-            { displayName = null; description = null; };
       in
       {
-        inherit sortKey;
-        inherit (meta) displayName description;
+        sortKey = template.sortKey or null;
+        displayName = template.displayName or null;
+        description = template.description or null;
         type =
           if type ? derivation then
             {
-              derivation = (removeAttrs type.derivation [ "displayName" "description" ]) // {
+              derivation = type.derivation // {
                 args =
                   opt
                   |> nixpkgs.lib.filterAttrs (_: optValue: optValue.visible or true)
@@ -152,8 +145,6 @@ pointyLib: rec {
                   );
               };
             }
-          else if type ? fileUpload then
-            { fileUpload = removeAttrs type.fileUpload [ "displayName" ]; }
           else
             type;
       }
