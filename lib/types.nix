@@ -28,7 +28,8 @@ with types;
     // {
       description = {
         type.list = inner.description.type;
-        inherit (inner.description) description displayName;
+        description = "List of " + inner.description.description;
+        displayName = inner.description.displayName or null;
         __toString = _: "TList(" + builtins.toString inner.description + ")";
       };
     };
