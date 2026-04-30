@@ -5,6 +5,7 @@ with types;
   pointy.step =
     {
       description,
+      displayName ? null,
       allowedTypes ? null,
     }:
     (addCheck package (
@@ -15,7 +16,7 @@ with types;
     // {
       description = {
         type.step = optionalAttrs (allowedTypes != null) { inherit allowedTypes; };
-        inherit description;
+        inherit description displayName;
         __toString =
           _: "TStep" + optionalString (allowedTypes != null) "[${builtins.toString allowedTypes}]";
       };
@@ -27,7 +28,7 @@ with types;
     // {
       description = {
         type.list = inner.description.type;
-        description = "List of " + inner.description.description;
+        inherit (inner.description) description displayName;
         __toString = _: "TList(" + builtins.toString inner.description + ")";
       };
     };
@@ -35,13 +36,14 @@ with types;
   pointy.string =
     {
       description,
+      displayName ? null,
       display ? { },
     }:
     str
     // {
       description = {
         type.string = { inherit display; };
-        inherit description;
+        inherit description displayName;
         __toString = _: "TString"; # for evaluation error messages
       };
     };
@@ -62,7 +64,25 @@ with types;
     let
       derivationType = submodule {
         options = {
-          derivation = mkOption { type = enum [ { } ]; };
+          derivation = mkOption {
+            type = submodule {
+              options = {
+                displayName = mkOption {
+                  type = nullOr str;
+                  default = null;
+                };
+                description = mkOption {
+                  type = nullOr str;
+                  default = null;
+                };
+                withSrcFiles = mkOption {
+                  type = bool;
+                  default = false;
+                };
+              };
+            };
+            default = { };
+          };
         };
       };
 
@@ -72,7 +92,14 @@ with types;
             type = submodule {
               options = {
                 allowedExtensions = mkOption { type = listOf str; };
-                description = mkOption { type = str; };
+                displayName = mkOption {
+                  type = nullOr str;
+                  default = null;
+                };
+                description = mkOption {
+                  type = nullOr str;
+                  default = null;
+                };
               };
             };
           };
