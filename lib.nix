@@ -121,13 +121,16 @@ pointyLib: rec {
     |> builtins.mapAttrs (
       name: opt:
       let
-        type = templates.${name}.pointy.type;
+        template = templates.${name};
+        type = template.pointy.type;
       in
       {
+        sortKey = template.sortKey or null;
+        displayName = template.displayName or null;
+        description = template.description or null;
         type =
           if type ? derivation then
-            type
-            // {
+            {
               derivation = type.derivation // {
                 args =
                   opt
@@ -137,6 +140,7 @@ pointyLib: rec {
                     { type, ... }:
                     {
                       inherit (type.description) type description;
+                      displayName = type.description.displayName or null;
                     }
                   );
               };
