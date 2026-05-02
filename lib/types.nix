@@ -43,7 +43,18 @@ with types;
     str
     // {
       description = {
-        type.string = { inherit display; };
+        type.string = {
+          display =
+            if display ? code then
+              display
+              // {
+                code = display.code // {
+                  language = display.code.language;
+                };
+              }
+            else
+              display;
+        };
         inherit description displayName;
         __toString = _: "TString"; # for evaluation error messages
       };
