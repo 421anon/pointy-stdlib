@@ -39,15 +39,6 @@ pointyLib: rec {
     let
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
-      mkStoreReference =
-        hash:
-        pkgs.stdenv.mkDerivation {
-          name = "store-ref";
-          outputHashAlgo = "sha256";
-          outputHashMode = "recursive";
-          outputHash = hash;
-          builder = pkgs.writeScript "fail" "exit 1";
-        };
     in
     stepDefs
     |> builtins.mapAttrs (
@@ -72,7 +63,15 @@ pointyLib: rec {
           then
             resolveArg stepConfig.${type}.type.derivation.args.${argName}.type value
           else if stepConfig ? ${type} && stepConfig.${type}.type ? fileUpload && argName == "uploaded" then
-            mkStoreReference value.hash
+            pkgs.stdenv.mkDerivation {
+              name = "store-ref";
+              outputHashAlgo = "sha256";
+              outputHashMode = "recursive";
+              outputHash = value.hash;
+              builder = pkgs.writeScript "fail" "exit 1";
+            }
+          else if stepConfig ? ${type} && stepConfig.${type}.type ? download && argName == "downloaded" then
+            pkgs.fetchurl { inherit (value) url hash; }
           else
             value
         );
