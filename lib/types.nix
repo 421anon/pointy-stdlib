@@ -49,6 +49,21 @@ with types;
       };
     };
 
+  pointy.enum =
+    {
+      values,
+      description,
+      displayName ? null,
+    }:
+    str
+    // {
+      description = {
+        type.enum = values;
+        inherit description displayName;
+        __toString = _: "TEnum[" + builtins.toString values + "]";
+      };
+    };
+
   pointy.stepDef = submodule {
     options = {
       type = mkOption { type = str; };
