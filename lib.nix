@@ -85,28 +85,40 @@ pointyLib: rec {
           && builtins.pathExists srcDir;
 
       in
-      dream2nix.lib.evalModules {
-        packageSets.nixpkgs = pkgs;
-        specialArgs = { inherit pkgs; };
-        modules = [
-          libModule
-          templates.${type}.module
-          {
-            pointy.${type} = resolve args // {
-              inherit id;
-            };
-          }
-        ]
-        ++ (
-          if hasSrcDir then
-            [
-              {
-                mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
-              }
-            ]
-          else
-            [ { mkDerivation.dontUnpack = true; } ]
-        );
+      let
+        resolvedArgs = resolve args;
+        result = dream2nix.lib.evalModules {
+          packageSets.nixpkgs = pkgs;
+          specialArgs = { inherit pkgs; };
+          modules = [
+            libModule
+            templates.${type}.module
+            {
+              pointy.${type} = resolvedArgs // {
+                inherit id;
+              };
+            }
+          ]
+          ++ (
+            if hasSrcDir then
+              [
+                {
+                  mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
+                }
+              ]
+            else
+              [ { mkDerivation.dontUnpack = true; } ]
+          );
+        };
+      in
+      result
+      // {
+        meta = (result.meta or { }) // {
+          pointy = {
+            inherit id type;
+            args = resolvedArgs;
+          };
+        };
       }
     );
 
