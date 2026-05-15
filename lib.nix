@@ -161,21 +161,57 @@ pointyLib: rec {
       }
     );
 
+  evalPresets =
+    { templates, presets, ... }:
+    builtins.mapAttrs (
+      name: preset:
+      let
+        unknown = builtins.filter (t: !(templates ? ${t})) preset.templates;
+      in
+      if unknown != [ ] then
+        throw "Preset `${name}` references unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknown}."
+      else
+        preset
+    ) presets;
+
   evalProjects =
-    args@{ projects, ... }:
+    args@{
+      projects,
+      templates,
+      presets ? { },
+      ...
+    }:
     let
       stepDefs = evalStepDefs args;
     in
     builtins.mapAttrs (
       id: proj:
-      proj
-      // {
-        id = nixpkgs.lib.toIntBase10 id;
-        steps = map (step: {
-          def = stepDefs.${toString step.id};
-          inherit (step) hidden sortKey;
-        }) proj.steps;
-      }
+      let
+        hasPreset = proj.preset != null;
+        hasTemplates = proj.templates != null;
+        unknownTemplates =
+          if hasTemplates then
+            builtins.filter (t: !(templates ? ${t})) proj.templates
+          else
+            [ ];
+      in
+      if !hasPreset && !hasTemplates then
+        throw "Project `${id}` must define either `preset` or `templates`."
+      else if hasPreset && hasTemplates then
+        throw "Project `${id}` cannot define both `preset` and `templates`."
+      else if hasPreset && !(presets ? ${proj.preset}) then
+        throw "Project `${id}` references unknown preset `${proj.preset}`."
+      else if hasTemplates && unknownTemplates != [ ] then
+        throw "Project `${id}` references unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}."
+      else
+        proj
+        // {
+          id = nixpkgs.lib.toIntBase10 id;
+          steps = map (step: {
+            def = stepDefs.${toString step.id};
+            inherit (step) hidden sortKey;
+          }) proj.steps;
+        }
     ) projects;
 
   evalStepDefs =
