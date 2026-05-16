@@ -202,7 +202,7 @@ pointyLib: rec {
           ++ nixpkgs.lib.optional (hasTemplates && unknownTemplates != [ ])
             "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
           ++ nixpkgs.lib.optional (unknownStepIds != [ ])
-            "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}. They will be dropped from the project file on the next save.";
+            "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}.;
       in
       if !hasPreset && !hasTemplates then
         throw "Project `${id}` must define either `preset` or `templates`."
