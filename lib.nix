@@ -194,15 +194,20 @@ pointyLib: rec {
             builtins.filter (t: !(templates ? ${t})) proj.templates
           else
             [ ];
+        knownSteps = builtins.filter (s: stepDefs ? ${toString s.id}) proj.steps;
+        unknownStepIds = map (s: toString s.id) (builtins.filter (s: !(stepDefs ? ${toString s.id})) proj.steps);
+        validationErrors =
+          nixpkgs.lib.optional (hasPreset && !(presets ? ${proj.preset}))
+            "Unknown preset `${proj.preset}`. Pick another preset in the edit form."
+          ++ nixpkgs.lib.optional (hasTemplates && unknownTemplates != [ ])
+            "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
+          ++ nixpkgs.lib.optional (unknownStepIds != [ ])
+            "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}. They will be dropped from the project file on the next save.";
       in
       if !hasPreset && !hasTemplates then
         throw "Project `${id}` must define either `preset` or `templates`."
       else if hasPreset && hasTemplates then
         throw "Project `${id}` cannot define both `preset` and `templates`."
-      else if hasPreset && !(presets ? ${proj.preset}) then
-        throw "Project `${id}` references unknown preset `${proj.preset}`."
-      else if hasTemplates && unknownTemplates != [ ] then
-        throw "Project `${id}` references unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}."
       else
         proj
         // {
@@ -210,7 +215,8 @@ pointyLib: rec {
           steps = map (step: {
             def = stepDefs.${toString step.id};
             inherit (step) hidden sortKey;
-          }) proj.steps;
+          }) knownSteps;
+          inherit validationErrors;
         }
     ) projects;
 
