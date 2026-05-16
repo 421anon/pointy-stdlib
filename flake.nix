@@ -29,6 +29,10 @@
         options.pointy = {
           stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.stepDef; };
           templates = top.lib.mkOption { type = top.lib.types.attrs; };
+          presets = top.lib.mkOption {
+            type = top.lib.types.attrsOf pointyLib.types.pointy.preset;
+            default = { };
+          };
           projects = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.project; };
           srcFiles = top.lib.mkOption { type = top.lib.types.raw; };
         };
@@ -44,6 +48,7 @@
           {
             flake.pointy = with pointyLib; {
               stepConfig = evalStepConfig cfg;
+              presets = evalPresets cfg;
               projects = evalProjects cfg;
               stepDefs = evalStepDefs cfg;
               srcFiles = cfg.srcFiles;

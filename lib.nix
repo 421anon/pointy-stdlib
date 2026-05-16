@@ -161,21 +161,63 @@ pointyLib: rec {
       }
     );
 
+  evalPresets =
+    { templates, presets, ... }:
+    builtins.mapAttrs (
+      name: preset:
+      let
+        unknown = builtins.filter (t: !(templates ? ${t})) preset.templates;
+      in
+      if unknown != [ ] then
+        throw "Preset `${name}` references unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknown}."
+      else
+        preset
+    ) presets;
+
   evalProjects =
-    args@{ projects, ... }:
+    args@{
+      projects,
+      templates,
+      presets ? { },
+      ...
+    }:
     let
       stepDefs = evalStepDefs args;
     in
     builtins.mapAttrs (
       id: proj:
-      proj
-      // {
-        id = nixpkgs.lib.toIntBase10 id;
-        steps = map (step: {
-          def = stepDefs.${toString step.id};
-          inherit (step) hidden sortKey;
-        }) proj.steps;
-      }
+      let
+        hasPreset = proj.preset != null;
+        hasTemplates = proj.templates != null;
+        unknownTemplates =
+          if hasTemplates then
+            builtins.filter (t: !(templates ? ${t})) proj.templates
+          else
+            [ ];
+        knownSteps = builtins.filter (s: stepDefs ? ${toString s.id}) proj.steps;
+        unknownStepIds = map (s: toString s.id) (builtins.filter (s: !(stepDefs ? ${toString s.id})) proj.steps);
+        validationErrors =
+          nixpkgs.lib.optional (hasPreset && !(presets ? ${proj.preset}))
+            "Unknown preset `${proj.preset}`. Pick another preset in the edit form."
+          ++ nixpkgs.lib.optional (hasTemplates && unknownTemplates != [ ])
+            "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
+          ++ nixpkgs.lib.optional (unknownStepIds != [ ])
+            "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}.;
+      in
+      if !hasPreset && !hasTemplates then
+        throw "Project `${id}` must define either `preset` or `templates`."
+      else if hasPreset && hasTemplates then
+        throw "Project `${id}` cannot define both `preset` and `templates`."
+      else
+        proj
+        // {
+          id = nixpkgs.lib.toIntBase10 id;
+          steps = map (step: {
+            def = stepDefs.${toString step.id};
+            inherit (step) hidden sortKey;
+          }) knownSteps;
+          inherit validationErrors;
+        }
     ) projects;
 
   evalStepDefs =

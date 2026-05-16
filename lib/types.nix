@@ -132,11 +132,34 @@ with types;
       };
     };
 
+  pointy.preset = submodule {
+    options = {
+      displayName = mkOption { type = str; };
+      description = mkOption {
+        type = nullOr str;
+        default = null;
+      };
+      sortKey = mkOption {
+        type = nullOr int;
+        default = null;
+      };
+      templates = mkOption { type = listOf str; };
+    };
+  };
+
   pointy.project = submodule {
     options = {
       name = mkOption { type = str; };
       hidden = mkOption { type = bool; };
       sortKey = mkOption { type = nullOr int; };
+      preset = mkOption {
+        type = nullOr str;
+        default = null;
+      };
+      templates = mkOption {
+        type = nullOr (listOf str);
+        default = null;
+      };
       steps = mkOption {
         type =
           listOf
