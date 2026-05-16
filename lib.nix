@@ -190,19 +190,21 @@ pointyLib: rec {
         hasPreset = proj.preset != null;
         hasTemplates = proj.templates != null;
         unknownTemplates =
-          if hasTemplates then
-            builtins.filter (t: !(templates ? ${t})) proj.templates
-          else
-            [ ];
+          if hasTemplates then builtins.filter (t: !(templates ? ${t})) proj.templates else [ ];
         knownSteps = builtins.filter (s: stepDefs ? ${toString s.id}) proj.steps;
-        unknownStepIds = map (s: toString s.id) (builtins.filter (s: !(stepDefs ? ${toString s.id})) proj.steps);
+        unknownStepIds = map (s: toString s.id) (
+          builtins.filter (s: !(stepDefs ? ${toString s.id})) proj.steps
+        );
         validationErrors =
-          nixpkgs.lib.optional (hasPreset && !(presets ? ${proj.preset}))
-            "Unknown preset `${proj.preset}`. Pick another preset in the edit form."
-          ++ nixpkgs.lib.optional (hasTemplates && unknownTemplates != [ ])
-            "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
-          ++ nixpkgs.lib.optional (unknownStepIds != [ ])
-            "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}.;
+          nixpkgs.lib.optional (
+            hasPreset && !(presets ? ${proj.preset})
+          ) "Unknown preset `${proj.preset}`. Pick another preset in the edit form."
+          ++
+            nixpkgs.lib.optional (hasTemplates && unknownTemplates != [ ])
+              "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
+          ++ nixpkgs.lib.optional (
+            unknownStepIds != [ ]
+          ) "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}.";
       in
       if !hasPreset && !hasTemplates then
         throw "Project `${id}` must define either `preset` or `templates`."
