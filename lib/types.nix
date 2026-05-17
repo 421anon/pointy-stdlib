@@ -39,11 +39,12 @@ with types;
       description,
       displayName ? null,
       display ? { },
+      autocomplete ? null,
     }:
     str
     // {
       description = {
-        type.string = { inherit display; };
+        type.string = { inherit display autocomplete; };
         inherit description displayName;
         __toString = _: "TString"; # for evaluation error messages
       };

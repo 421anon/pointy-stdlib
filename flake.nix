@@ -65,6 +65,7 @@
                       // {
                         steps = evalSteps <| cfg // { inherit pkgs; };
                         projectOutPaths = evalProjectOutPaths <| cfg // { inherit pkgs; };
+                        autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
                       };
                   };
                 };
