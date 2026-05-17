@@ -54,18 +54,25 @@ with types;
       values,
       description,
       displayName ? null,
+      valueDisplayNames ? {},
     }:
     str
     // {
       description = {
         type.enum = values;
+        type.enumDisplayNames = valueDisplayNames;
         inherit description displayName;
         __toString = _: "TEnum[" + builtins.toString values + "]";
       };
     };
 
   pointy.record =
-    fields:
+    arg:
+    let
+      hasMetadata = arg ? fields;
+      fields = if hasMetadata then arg.fields else arg;
+      displayName = if hasMetadata then arg.displayName or null else null;
+    in
     (submodule {
       options = mapAttrs (_: fieldType: mkOption { type = fieldType; }) fields;
     })
@@ -76,9 +83,11 @@ with types;
           fields = mapAttrs (_: fieldType: {
             inherit (fieldType.description) description;
             type = fieldType.description.type;
+            displayName = fieldType.description.displayName or null;
           }) fields;
         };
         description = "Record with fields: " + concatStringsSep ", " (attrNames fields);
+        inherit displayName;
         __toString = _: "TRecord";
       };
     };
