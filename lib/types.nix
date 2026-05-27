@@ -1,6 +1,16 @@
 { nixpkgs }:
 with nixpkgs.lib;
 with types;
+let
+  requirementsType = submodule {
+    options = {
+      ram = mkOption { type = str; };
+      cpu = mkOption { type = int; };
+      ior = mkOption { type = str; };
+      iow = mkOption { type = str; };
+    };
+  };
+in
 {
   pointy.step =
     {
@@ -93,6 +103,8 @@ with types;
       };
     };
 
+  pointy.requirements = requirementsType;
+
   pointy.stepDef = submodule {
     options = {
       type = mkOption { type = str; };
@@ -102,6 +114,10 @@ with types;
         default = "";
       };
       args = mkOption { type = attrs; };
+      requirements = mkOption {
+        type = nullOr requirementsType;
+        default = null;
+      };
     };
   };
 
@@ -155,6 +171,16 @@ with types;
             derivationType
             fileUploadType
           ];
+        };
+
+        requirements = mkOption {
+          type = functionTo requirementsType;
+          default = _: {
+            ram = "1G";
+            cpu = 1;
+            ior = "0";
+            iow = "0";
+          };
         };
 
         module = mkOption { type = deferredModule; };

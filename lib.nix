@@ -39,11 +39,22 @@ pointyLib: rec {
     let
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
+      defaultRequirements = {
+        ram = "1G";
+        cpu = 1;
+        ior = "0";
+        iow = "0";
+      };
     in
     stepDefs
     |> builtins.mapAttrs (
       id:
-      { type, args, ... }:
+      {
+        type,
+        args,
+        requirements ? null,
+        ...
+      }:
       let
         resolveArg =
           argType: value:
@@ -87,6 +98,11 @@ pointyLib: rec {
       in
       let
         resolvedArgs = resolve args;
+        resolvedRequirements =
+          if requirements != null then
+            requirements
+          else
+            (templates.${type}.requirements or (_: defaultRequirements)) resolvedArgs;
         result = dream2nix.lib.evalModules {
           packageSets.nixpkgs = pkgs;
           specialArgs = { inherit pkgs; };
@@ -113,9 +129,11 @@ pointyLib: rec {
       in
       result
       // {
+        requirements = resolvedRequirements;
         meta = (result.meta or { }) // {
           pointy = {
             inherit id type;
+            requirements = resolvedRequirements;
             args = resolvedArgs;
           };
         };
