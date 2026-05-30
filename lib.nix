@@ -131,7 +131,7 @@ pointyLib: rec {
       // {
         requirements = resolvedRequirements;
         meta = (result.meta or { }) // {
-          pointy = {
+          pointy = (result.meta.pointy or { }) // {
             inherit id type;
             requirements = resolvedRequirements;
             args = resolvedArgs;
@@ -376,6 +376,73 @@ pointyLib: rec {
         ).result;
     in
     builtins.mapAttrs (id: _: transitiveDepsOf id) stepDefs;
+
+  # Build a derivation that scans `baseDrv` for CSV/TSV files and emits a
+  # meta.json per directory containing column metadata (type + nullable).
+  # Uses duckdb sniff_csv for type detection and UNPIVOT for nullability.
+  # `baseDrv` is the step output derivation.
+  csvExtras =
+    {
+      pkgs,
+      baseDrv,
+      requirements ? {
+        ram = "2G";
+        cpu = 2;
+        ior = "0";
+        iow = "0";
+      },
+    }:
+    pkgs.runCommand "csv-extras" { } ''
+      bash ${./lib/csv-extras.sh} \
+        ${pkgs.duckdb}/bin/duckdb \
+        ${pkgs.jq}/bin/jq \
+        "${baseDrv}" \
+        "$out"
+    ''
+    // { inherit requirements; };
+
+  # Build a derivation that scans `baseDrv` for FASTQ files (*.fastq,
+  # *.fq, *.fastq.gz, *.fq.gz) and emits a meta.json per directory with
+  # readCount.  Fails the build when a file's line count is not divisible by 4.
+  fastqExtras =
+    {
+      pkgs,
+      baseDrv,
+      requirements ? {
+        ram = "1G";
+        cpu = 1;
+        ior = "0";
+        iow = "0";
+      },
+    }:
+    pkgs.runCommand "fastq-extras" { } ''
+      bash ${./lib/fastq-extras.sh} \
+        "${baseDrv}" \
+        "$out"
+    ''
+    // { inherit requirements; };
+
+  # Merge multiple extras derivations into one.  Each derivation is a
+  # directory tree of meta.json files (keyed by child file name).  Duplicate
+  # child-file keys within the same directory fail the build.
+  mergeExtras =
+    {
+      pkgs,
+      extras,
+      requirements ? {
+        ram = "1G";
+        cpu = 1;
+        ior = "0";
+        iow = "0";
+      },
+    }:
+    let
+      srcs = nixpkgs.lib.concatStringsSep " " (map (e: "\"${e}\"" ) extras);
+    in
+    pkgs.runCommand "merged-extras" { } ''
+      bash ${./lib/merge-extras.sh} ${pkgs.jq}/bin/jq "$out" ${srcs}
+    ''
+    // { inherit requirements; };
 
   mkFlake =
     let
