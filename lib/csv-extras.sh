@@ -66,7 +66,7 @@ SQL
 
     columns_json=$(
         printf '%s' "$result" \
-            | "$JQ" -c '.[0].columns | if type == "string" then fromjson else . end // []'
+            | "$JQ" -c '.[0].columns // []'
     )
 
     entry=$(
