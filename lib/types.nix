@@ -65,7 +65,7 @@ in
       values,
       description,
       displayName ? null,
-      valueDisplayNames ? {},
+      valueDisplayNames ? { },
     }:
     str
     // {
@@ -151,6 +151,14 @@ in
         };
       };
 
+      downloadType = submodule {
+        options = {
+          download = mkOption {
+            type = submodule { };
+          };
+        };
+      };
+
     in
     submodule {
       options = {
@@ -170,6 +178,7 @@ in
           type = oneOf [
             derivationType
             fileUploadType
+            downloadType
           ];
         };
 
