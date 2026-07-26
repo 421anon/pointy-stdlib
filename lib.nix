@@ -1,7 +1,6 @@
 {
   self,
   nixpkgs,
-  dream2nix,
   flake-parts,
 }:
 pointyLib: rec {
@@ -17,6 +16,9 @@ pointyLib: rec {
       options._pointy.lib = nixpkgs.lib.mkOption { type = lib.types.attrs; };
       config._pointy.lib = pointyLib;
     };
+
+  callTemplate = pkgs: template: config:
+    template.module { inherit config pkgs; dream2nix = null; lib = nixpkgs.lib; };
 
   loadDir =
     dir:
@@ -115,14 +117,13 @@ pointyLib: rec {
           else
             (templates.${type}.requirements or (_: defaultRequirements)) resolvedArgs;
         template = templates.${type};
-        callTemplate = config: template.module { inherit config dream2nix pkgs; lib = nixpkgs.lib; };
-        normalizedArgs = normalizeArgs type ((callTemplate { _pointy.lib = pointyLib; }).options.pointy.${type} or {}) (resolvedArgs // { inherit id; });
+        normalizedArgs = normalizeArgs type ((callTemplate pkgs template { _pointy.lib = pointyLib; }).options.pointy.${type} or {}) (resolvedArgs // { inherit id; });
         sourceOverride = if hasSrcDir then {
           unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
         } else {
           dontUnpack = true;
         };
-        cfg = (callTemplate { _pointy.lib = pointyLib; pointy.${type} = normalizedArgs; public = result; }).config;
+        cfg = (callTemplate pkgs template { _pointy.lib = pointyLib; pointy.${type} = normalizedArgs; public = result; }).config;
         result = pkgs.stdenv.mkDerivation ({ pname = cfg.name or type; version = cfg.version or ""; } // (cfg.env or {}) // (cfg.mkDerivation or {}) // sourceOverride);
       in
       result
@@ -142,16 +143,11 @@ pointyLib: rec {
 
   evalStepConfig =
     { templates, ... }:
-    (dream2nix.lib.evalModules {
-      packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
-      modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
-      raw = true;
-    }).options.pointy
-    |> builtins.mapAttrs (
-      name: opt:
+    builtins.mapAttrs (
+      name: template:
       let
-        template = templates.${name};
         type = template.pointy.type;
+        opt = (callTemplate nixpkgs.legacyPackages.x86_64-linux template { _pointy.lib = pointyLib; }).options.pointy.${name};
       in
       {
         sortKey = template.sortKey or null;
@@ -177,7 +173,7 @@ pointyLib: rec {
           else
             type;
       }
-    );
+    ) templates;
 
   evalAutocomplete =
     { templates, pkgs, ... }:

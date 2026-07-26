@@ -3,10 +3,6 @@
     nixpkgs = {
       url = "github:NixOS/nixpkgs";
     };
-    dream2nix = {
-      url = "github:nix-community/dream2nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
     };
@@ -16,7 +12,6 @@
     inputs@{
       self,
       nixpkgs,
-      dream2nix,
       flake-parts,
     }:
     let
