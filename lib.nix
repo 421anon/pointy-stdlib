@@ -10,16 +10,6 @@ pointyLib: rec {
   isStepArg = argType: argType ? step;
   isStepListArg = argType: argType ? list && argType.list ? step;
 
-  libModule =
-    { lib, ... }:
-    {
-      options._pointy.lib = nixpkgs.lib.mkOption { type = lib.types.attrs; };
-      config._pointy.lib = pointyLib;
-    };
-
-  callTemplate = pkgs: template: config:
-    template.module { inherit config pkgs; dream2nix = null; lib = nixpkgs.lib; };
-
   loadDir =
     dir:
     builtins.readDir dir
@@ -41,6 +31,7 @@ pointyLib: rec {
     let
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
+      compiledTemplates = builtins.mapAttrs (_: template: template.compile { lib = nixpkgs.lib; inherit pkgs pointyLib; }) templates;
       defaultRequirements = {
         ram = "1G";
         cpu = 1;
@@ -116,14 +107,13 @@ pointyLib: rec {
             requirements
           else
             (templates.${type}.requirements or (_: defaultRequirements)) resolvedArgs;
-        template = templates.${type};
-        normalizedArgs = normalizeArgs type ((callTemplate pkgs template { _pointy.lib = pointyLib; }).options.pointy.${type} or {}) (resolvedArgs // { inherit id; });
+        normalizedArgs = normalizeArgs type compiledTemplates.${type}.options (resolvedArgs // { inherit id; });
         sourceOverride = if hasSrcDir then {
           unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
         } else {
           dontUnpack = true;
         };
-        cfg = (callTemplate pkgs template { _pointy.lib = pointyLib; pointy.${type} = normalizedArgs; public = result; }).config;
+        cfg = compiledTemplates.${type}.build { args = normalizedArgs; public = result; };
         result = pkgs.stdenv.mkDerivation ({ pname = cfg.name or type; version = cfg.version or ""; } // (cfg.env or {}) // (cfg.mkDerivation or {}) // sourceOverride);
       in
       result
@@ -147,7 +137,7 @@ pointyLib: rec {
       name: template:
       let
         type = template.pointy.type;
-        opt = (callTemplate nixpkgs.legacyPackages.x86_64-linux template { _pointy.lib = pointyLib; }).options.pointy.${name};
+        opt = (template.compile { pkgs = nixpkgs.legacyPackages.x86_64-linux; lib = nixpkgs.lib; inherit pointyLib; }).options;
       in
       {
         sortKey = template.sortKey or null;

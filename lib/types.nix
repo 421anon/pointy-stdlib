@@ -192,7 +192,7 @@ in
           };
         };
 
-        module = mkOption { type = deferredModule; };
+        compile = mkOption { type = functionTo attrs; };
       };
     };
 
