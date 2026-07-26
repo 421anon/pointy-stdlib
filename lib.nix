@@ -38,14 +38,16 @@ pointyLib: rec {
     }:
     let
       constructors = builtins.mapAttrs (_typeName: template:
-        dream2nix.lib.new {
-          packageSets.nixpkgs = pkgs;
-          specialArgs = { inherit pkgs; pointyLib = pointyLib; };
+        (nixpkgs.lib.evalModules {
+          specialArgs = {
+            inherit pkgs pointyLib;
+            packageSets.nixpkgs = pkgs;
+          };
           modules = [
             dream2nix.modules.dream2nix.mkDerivationConstructor
             template.constructor
           ];
-        }
+        }).config.public
       ) templates;
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
