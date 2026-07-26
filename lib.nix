@@ -18,6 +18,15 @@ pointyLib: rec {
       config._pointy.lib = pointyLib;
     };
 
+  packageFuncModulesOption =
+    { lib, ... }:
+    {
+      options._module.package-func.modules = lib.mkOption {
+        type = lib.types.listOf nixpkgs.lib.types.deferredModule;
+        default = [ ];
+      };
+    };
+
   loadDir =
     dir:
     builtins.readDir dir
@@ -50,7 +59,8 @@ pointyLib: rec {
                 dream2nix.modules.dream2nix.mkDerivation
               ];
             }
-            template.constructor
+            libModule
+            template.module
           ];
         }).config.public
       ) templates;
@@ -145,7 +155,8 @@ pointyLib: rec {
     { templates, ... }:
     (dream2nix.lib.evalModules {
       packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
-      modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
+      specialArgs = { inherit pointyLib; };
+      modules = [ libModule packageFuncModulesOption ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
       raw = true;
     }).options.pointy
     |> builtins.mapAttrs (
