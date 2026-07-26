@@ -55,6 +55,17 @@ pointyLib: rec {
         ior = "0";
         iow = "0";
       };
+      normalizeArgs = type: opts: args:
+        let
+          unknown = nixpkgs.lib.subtractLists (builtins.attrNames opts) (builtins.attrNames args);
+        in
+        if unknown != [ ] then
+          throw "pointy.${type}: unknown arg(s): ${nixpkgs.lib.concatStringsSep ", " unknown}"
+        else
+          builtins.mapAttrs (name: opt:
+            let value = args.${name} or (opt.default or (throw "pointy.${type}: missing required arg `${name}'"));
+            in if opt.type.check value then value else throw "pointy.${type}: invalid value for `${name}'"
+          ) opts;
     in
     stepDefs
     |> builtins.mapAttrs (
@@ -113,21 +124,26 @@ pointyLib: rec {
             requirements
           else
             (templates.${type}.requirements or (_: defaultRequirements)) resolvedArgs;
-        result = compiledModules.${type}.instantiate [
-          {
-            config = { pointy.${type} = resolvedArgs // { inherit id; }; } // (if hasSrcDir then {
-              mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
-            } else {
-              mkDerivation.dontUnpack = true;
-            });
-          }
-        ];
+        template = templates.${type};
+        callTemplate = config: template.module { inherit config dream2nix pkgs; lib = nixpkgs.lib; };
+        normalizedArgs = normalizeArgs type ((callTemplate { _pointy.lib = pointyLib; }).options.pointy.${type} or {}) (resolvedArgs // { inherit id; });
+        sourceOverride = if hasSrcDir then {
+          unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
+        } else {
+          dontUnpack = true;
+        };
+        baseArgsModule = { config = { pointy.${type} = resolvedArgs // { inherit id; }; mkDerivation = sourceOverride; }; };
+        cfg = (callTemplate { _pointy.lib = pointyLib; pointy.${type} = normalizedArgs; public = result; }).config;
+        result = pkgs.stdenv.mkDerivation ({ pname = cfg.name or type; version = cfg.version or ""; } // (cfg.env or {}) // (cfg.mkDerivation or {}) // sourceOverride);
       in
       result
       // {
+        name = cfg.name or type;
+        version = cfg.version or "";
+        instantiate = overrides: compiledModules.${type}.instantiate ([baseArgsModule] ++ overrides);
         requirements = resolvedRequirements;
-        meta = (result.meta or { }) // {
-          pointy = (result.meta.pointy or { }) // {
+        meta = (result.meta or {}) // {
+          pointy = (result.meta.pointy or {}) // {
             inherit id type;
             requirements = resolvedRequirements;
             args = resolvedArgs;
