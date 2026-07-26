@@ -18,15 +18,6 @@ pointyLib: rec {
       config._pointy.lib = pointyLib;
     };
 
-  packageFuncModulesOption =
-    { lib, ... }:
-    {
-      options._module.package-func.modules = lib.mkOption {
-        type = lib.types.listOf nixpkgs.lib.types.deferredModule;
-        default = [ ];
-      };
-    };
-
   loadDir =
     dir:
     builtins.readDir dir
@@ -46,23 +37,21 @@ pointyLib: rec {
       ...
     }:
     let
-      constructors = builtins.mapAttrs (_typeName: template:
-        (nixpkgs.lib.evalModules {
-          specialArgs = {
-            inherit pkgs pointyLib dream2nix;
-            packageSets.nixpkgs = pkgs;
-          };
+      compiledModules = builtins.mapAttrs (_typeName: template:
+        dream2nix.lib.evalModules {
+          packageSets.nixpkgs = pkgs;
+          specialArgs = { inherit pkgs pointyLib dream2nix; };
           modules = [
-            dream2nix.modules.dream2nix.package-func-instantiator
             {
-              config._module.package-func.modules = [
+              config._module.residualModules = [
                 dream2nix.modules.dream2nix.mkDerivation
               ];
             }
             libModule
             template.module
           ];
-        }).config.public
+          raw = true;
+        }
       ) templates;
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
@@ -130,13 +119,15 @@ pointyLib: rec {
             requirements
           else
             (templates.${type}.requirements or (_: defaultRequirements)) resolvedArgs;
-        result = constructors.${type} ({
-          pointy.${type} = resolvedArgs // { inherit id; };
-        } // (if hasSrcDir then {
-          mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
-        } else {
-          mkDerivation.dontUnpack = true;
-        }));
+        result = compiledModules.${type}.instantiate [
+          {
+            config = { pointy.${type} = resolvedArgs // { inherit id; }; } // (if hasSrcDir then {
+              mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
+            } else {
+              mkDerivation.dontUnpack = true;
+            });
+          }
+        ];
       in
       result
       // {
@@ -156,7 +147,7 @@ pointyLib: rec {
     (dream2nix.lib.evalModules {
       packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
       specialArgs = { inherit pointyLib; };
-      modules = [ libModule packageFuncModulesOption ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
+      modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
       raw = true;
     }).options.pointy
     |> builtins.mapAttrs (
