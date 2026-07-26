@@ -40,15 +40,9 @@ pointyLib: rec {
       compiledModules = builtins.mapAttrs (_typeName: template:
         dream2nix.lib.evalModules {
           packageSets.nixpkgs = pkgs;
-          specialArgs = { inherit pkgs pointyLib dream2nix; };
+          specialArgs = { inherit pkgs; };
           modules = [
-            {
-              config._module.residualModules = [
-                dream2nix.modules.dream2nix.mkDerivation
-              ];
-            }
-            libModule
-            template.module
+            { config._module.residualModules = [ libModule template.module ]; }
           ];
           raw = true;
         }
@@ -146,7 +140,6 @@ pointyLib: rec {
     { templates, ... }:
     (dream2nix.lib.evalModules {
       packageSets.nixpkgs = nixpkgs.legacyPackages.x86_64-linux;
-      specialArgs = { inherit pointyLib; };
       modules = [ libModule ] ++ builtins.map (t: t.module) (builtins.attrValues templates);
       raw = true;
     }).options.pointy
