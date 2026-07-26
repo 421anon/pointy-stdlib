@@ -4,7 +4,7 @@
       url = "github:NixOS/nixpkgs";
     };
     dream2nix = {
-      url = "github:ggPeti/dream2nix/lazy-review-constructors";
+      url = "github:nix-community/dream2nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-parts = {

@@ -9,16 +9,15 @@
         "pyproject-nix": "pyproject-nix"
       },
       "locked": {
-        "lastModified": 1785080142,
-        "narHash": "sha256-kLYOmlu8Aih+ldDHLccWPKf/FP5oeyclWhxrofM0IC8=",
-        "owner": "ggPeti",
+        "lastModified": 1765953015,
+        "narHash": "sha256-5FBZbbWR1Csp3Y2icfRkxMJw/a/5FGg8hCXej2//bbI=",
+        "owner": "nix-community",
         "repo": "dream2nix",
-        "rev": "3fcac247b4acb70fcfa7d7469559e1a88211f2f3",
+        "rev": "69eb01fa0995e1e90add49d8ca5bcba213b0416f",
         "type": "github"
       },
       "original": {
-        "owner": "ggPeti",
-        "ref": "lazy-review-constructors",
+        "owner": "nix-community",
         "repo": "dream2nix",
         "type": "github"
       }

@@ -37,16 +37,6 @@ pointyLib: rec {
       ...
     }:
     let
-      compiledModules = builtins.mapAttrs (_typeName: template:
-        dream2nix.lib.evalModules {
-          packageSets.nixpkgs = pkgs;
-          specialArgs = { inherit pkgs; };
-          modules = [
-            { config._module.residualModules = [ libModule template.module ]; }
-          ];
-          raw = true;
-        }
-      ) templates;
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
       defaultRequirements = {
@@ -132,7 +122,6 @@ pointyLib: rec {
         } else {
           dontUnpack = true;
         };
-        baseArgsModule = { config = { pointy.${type} = resolvedArgs // { inherit id; }; mkDerivation = sourceOverride; }; };
         cfg = (callTemplate { _pointy.lib = pointyLib; pointy.${type} = normalizedArgs; public = result; }).config;
         result = pkgs.stdenv.mkDerivation ({ pname = cfg.name or type; version = cfg.version or ""; } // (cfg.env or {}) // (cfg.mkDerivation or {}) // sourceOverride);
       in
@@ -140,10 +129,9 @@ pointyLib: rec {
       // {
         name = cfg.name or type;
         version = cfg.version or "";
-        instantiate = overrides: compiledModules.${type}.instantiate ([baseArgsModule] ++ overrides);
         requirements = resolvedRequirements;
-        meta = (result.meta or {}) // {
-          pointy = (result.meta.pointy or {}) // {
+        meta = (result.meta or { }) // {
+          pointy = (result.meta.pointy or { }) // {
             inherit id type;
             requirements = resolvedRequirements;
             args = resolvedArgs;

@@ -193,7 +193,6 @@ in
         };
 
         module = mkOption { type = deferredModule; };
-
       };
     };
 
