@@ -44,7 +44,12 @@ pointyLib: rec {
             packageSets.nixpkgs = pkgs;
           };
           modules = [
-            dream2nix.modules.dream2nix.mkDerivationConstructor
+            dream2nix.modules.dream2nix.package-func-instantiator
+            {
+              config._module.package-func.modules = [
+                dream2nix.modules.dream2nix.mkDerivation
+              ];
+            }
             template.constructor
           ];
         }).config.public
