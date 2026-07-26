@@ -40,7 +40,7 @@ pointyLib: rec {
       constructors = builtins.mapAttrs (_typeName: template:
         (nixpkgs.lib.evalModules {
           specialArgs = {
-            inherit pkgs pointyLib;
+            inherit pkgs pointyLib dream2nix;
             packageSets.nixpkgs = pkgs;
           };
           modules = [
