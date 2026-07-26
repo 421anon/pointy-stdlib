@@ -37,6 +37,16 @@ pointyLib: rec {
       ...
     }:
     let
+      constructors = builtins.mapAttrs (_typeName: template:
+        dream2nix.lib.new {
+          packageSets.nixpkgs = pkgs;
+          specialArgs = { inherit pkgs; pointyLib = pointyLib; };
+          modules = [
+            dream2nix.modules.dream2nix.mkDerivationConstructor
+            template.constructor
+          ];
+        }
+      ) templates;
       steps = evalSteps args;
       stepConfig = evalStepConfig { inherit templates; };
       defaultRequirements = {
@@ -103,29 +113,13 @@ pointyLib: rec {
             requirements
           else
             (templates.${type}.requirements or (_: defaultRequirements)) resolvedArgs;
-        result = dream2nix.lib.evalModules {
-          packageSets.nixpkgs = pkgs;
-          specialArgs = { inherit pkgs; };
-          modules = [
-            libModule
-            templates.${type}.module
-            {
-              pointy.${type} = resolvedArgs // {
-                inherit id;
-              };
-            }
-          ]
-          ++ (
-            if hasSrcDir then
-              [
-                {
-                  mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
-                }
-              ]
-            else
-              [ { mkDerivation.dontUnpack = true; } ]
-          );
-        };
+        result = constructors.${type} ({
+          pointy.${type} = resolvedArgs // { inherit id; };
+        } // (if hasSrcDir then {
+          mkDerivation.unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
+        } else {
+          mkDerivation.dontUnpack = true;
+        }));
       in
       result
       // {

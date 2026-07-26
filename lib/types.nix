@@ -193,6 +193,8 @@ in
         };
 
         module = mkOption { type = deferredModule; };
+
+        constructor = mkOption { type = deferredModule; };
       };
     };
 
