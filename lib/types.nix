@@ -60,6 +60,22 @@ in
       };
     };
 
+  pointy.int =
+    {
+      description,
+      displayName ? null,
+      display ? { },
+      autocomplete ? null,
+    }:
+    int
+    // {
+      description = {
+        type.int = { inherit display autocomplete; };
+        inherit description displayName;
+        __toString = _: "TInt"; # for evaluation error messages
+      };
+    };
+
   pointy.enum =
     {
       values,
