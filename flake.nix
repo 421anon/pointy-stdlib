@@ -73,8 +73,9 @@
               name = "";
             };
 
-            # Resolve a declared dependency to its flake output. Throws a
-            # helpful error when the input is unknown or not a pointy flake.
+            # Resolve a declared dependency to its flake input (the full input
+            # flake attrset); callers pick `.pointy` / `.packages.<sys>.pointy` off it.
+            # Throws a helpful error when the input is unknown or not a pointy flake.
             depOutput =
               ns: decl:
               let
@@ -95,14 +96,14 @@
             # Backend contract (`#pointy.deps`): namespace -> { input, repo? }.
             # Pure metadata of this repo's own committed state; does not force
             # evaluation of dependency content.
-            depsJson = builtins.mapAttrs (
+            depsContract = builtins.mapAttrs (
               _: decl:
               { input = decl.input; }
               // (if decl.repo != null then { inherit (decl) repo; } else { })
             ) cfg.deps;
 
-            # Mount each co-managed dependency's pointy output under a
-            # namespace so this repo can refer to its stepDefs/templates / projects / presets / srcFiles.
+            # Mount each declared dependency's pointy domain output (stepDefs,
+            # stepConfig, templates, projects, presets, srcFiles, deps) under a namespace.
             domainNamespaces = builtins.mapAttrs (ns: decl: (depOutput ns decl).pointy) cfg.deps;
 
             # Per-system mount: also exposes dependency built steps / projectOutPaths / autocomplete.
@@ -130,7 +131,7 @@
               stepDefs = evalStepDefs cfg;
               srcFiles = cfg.srcFiles;
               dependencies = evalDependencies cfg;
-              deps = depsJson;
+              deps = depsContract;
               namespaces = domainNamespaces;
             };
             perSystem =
