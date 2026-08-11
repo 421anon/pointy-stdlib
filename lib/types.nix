@@ -17,6 +17,7 @@ in
       description,
       displayName ? null,
       allowedTypes ? null,
+      quickCreate ? false,
     }:
     (addCheck package (
       pkg:
@@ -25,7 +26,9 @@ in
     ))
     // {
       description = {
-        type.step = optionalAttrs (allowedTypes != null) { inherit allowedTypes; };
+        type.step =
+          optionalAttrs (allowedTypes != null) { inherit allowedTypes; }
+          // optionalAttrs quickCreate { inherit quickCreate; };
         inherit description displayName;
         __toString =
           _: "TStep" + optionalString (allowedTypes != null) "[${builtins.toString allowedTypes}]";
