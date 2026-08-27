@@ -143,6 +143,7 @@ pointyLib: rec {
         sortKey = template.sortKey or null;
         displayName = template.displayName or null;
         description = template.description or null;
+        icon = template.icon or null;
         type =
           if type ? derivation then
             {
