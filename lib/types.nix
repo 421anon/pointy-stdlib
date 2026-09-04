@@ -132,6 +132,10 @@ in
         type = str;
         default = "";
       };
+      validationCommitHash = mkOption {
+        type = nullOr str;
+        default = null;
+      };
       args = mkOption { type = attrs; };
       requirements = mkOption {
         type = nullOr requirementsType;
