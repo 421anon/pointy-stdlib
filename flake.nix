@@ -51,17 +51,23 @@
           in
           {
             flake.pointy =
+              let
+                stepConfigDoc = with pointyLib;
+                  builtins.fromJSON (builtins.readFile (mkStepConfig {
+                    pkgs = cfg.semantic.pkgs;
+                    schema = cfg.semantic.result.contractSchema;
+                    inherit (cfg) templates;
+                  }));
+              in
               with pointyLib;
               {
-                # stepConfig is host-generated from the CORE schema: the
-                # flake output is the realized merge derivation (built
-                # from the host contractSchema over the enrolled
-                # sources).  Semantic is always on.
-                stepConfig = mkStepConfig {
-                  pkgs = cfg.semantic.pkgs;
-                  schema = cfg.semantic.result.contractSchema;
-                  inherit (cfg) templates;
-                };
+                # stepConfig is the host-generated merge document: the
+                # core argument schema with the host's presentation
+                # overrides.  The merge derivation is realized at
+                # evaluation (user-authorized IFD) and its document read
+                # here, so `nix eval --json '.#pointy.stepConfig'`
+                # yields the document directly.
+                stepConfig = stepConfigDoc;
                 presets = evalPresets cfg;
                 projects = evalProjects cfg;
                 stepDefs = evalStepDefs cfg;
