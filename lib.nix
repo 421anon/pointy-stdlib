@@ -418,7 +418,11 @@ pointyLib: rec {
         coreRequiredNames =
           builtins.map (
             sp: sp.parameter
-          ) (builtins.filter (sp: sp.required or true) (if iface != null then iface.parameters or [ ] else [ ]));
+          ) (builtins.filter (
+            sp:
+            (sp.required or true)
+            && (sp.kind or "value") != "subjects"
+          ) (if iface != null then iface.parameters or [ ] else [ ]));
         missingCore = nixpkgs.lib.subtractLists (builtins.attrNames args) coreRequiredNames;
         normalizedArgs =
           if unknown != [ ] then
