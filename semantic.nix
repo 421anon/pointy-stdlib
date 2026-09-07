@@ -304,22 +304,14 @@ in
       certificates = resolvableMap (h: h.certificate);
     in
     {
+      # One domain surface; flake-parts' packages tree accepts a single
+      # packages.pointy definition (the raw steps aggregate), so the
+      # semantic kernel and its derivation views live next to the other
+      # pointy metadata at the flake root.
       flake.pointy = {
         inherit handles unresolvable notebookAdapter transport;
-      };
-
-      # Derivation-only additions: flake-parts' packages tree is typed
-      # `package`, so non-derivation kernel data lives on flake.pointy
-      # instead.
-      perSystem = { ... }: {
-        packages.pointy = {
-          # Aggregates must carry the derivation marker to satisfy the
-          # `package` type (same trick the raw steps aggregate uses).
-          type = "derivation";
-          name = "pointy-semantic";
-          inherit checked certificates;
-          contractModel = sharedModel;
-        };
+        inherit checked certificates;
+        contractModel = sharedModel;
       };
     }
   );
