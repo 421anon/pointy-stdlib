@@ -16,11 +16,14 @@
     }:
     let
       pointyLib = import ./lib.nix inputs pointyLib;
+      semanticModule = import ./semantic.nix { inherit pointyLib; };
     in
     {
       lib = pointyLib;
 
-      flakeModules.default = top: {
+      flakeModules = {
+        semantic = semanticModule;
+        default = top: {
         options.pointy = {
           stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.stepDef; };
           templates = top.lib.mkOption { type = top.lib.types.attrs; };
@@ -66,6 +69,7 @@
                 };
               };
           };
+        };
       };
     };
 }
