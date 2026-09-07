@@ -91,7 +91,10 @@
                           inherit pkgs;
                           contractSchema = cfg.semantic.result.contractSchema;
                         };
-                        projectOutPaths = evalProjectOutPaths <| cfg // { inherit pkgs; };
+                        projectOutPaths = evalProjectOutPaths <| cfg // {
+                          inherit pkgs;
+                          contractSchema = cfg.semantic.result.contractSchema;
+                        };
                         autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
                       };
                   };
