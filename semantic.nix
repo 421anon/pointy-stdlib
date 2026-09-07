@@ -67,8 +67,12 @@ in
 
         resolveBundle = name: spec:
           let
-            bundle = sel.language.pointyScanners.${system}.${name} or
-              throw "pointy.semantic: no scanner bundle `${name}' in the language flake's pointyScanners.${system}";
+            bundleScope = sel.language.pointyScanners.${system};
+            bundle =
+              if builtins.hasAttr name bundleScope then
+                bundleScope.${name}
+              else
+                throw "pointy.semantic: no scanner bundle `${name}' in the language flake's pointyScanners.${system}";
           in
           {
             interface = spec.interface or bundle.interface;
