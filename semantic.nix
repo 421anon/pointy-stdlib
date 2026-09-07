@@ -62,7 +62,7 @@ in
     };
 
     perSystem =
-      { pkgs, system, config, ... }:
+      { pkgs, system, ... }:
       let
         langFlake = top.inputs.${sel.language-input};
         langLib = langFlake.lib.${system};
@@ -91,7 +91,12 @@ in
 
         templates = top.config.pointy.templates;
         records = top.config.pointy.stepDefs;
-        steps = config.packages.pointy.steps;
+        # Same evaluation the default module publishes as packages.pointy.steps
+        # (identical derivations — same function, args, pkgs).  Evaluated
+        # here rather than read back from config: reading
+        # config.packages.pointy while defining packages.pointy.* merges
+        # the node into itself (infinite recursion).
+        steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs; });
 
         compiledTemplates = builtins.mapAttrs (
           _: tpl:
