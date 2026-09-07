@@ -44,14 +44,21 @@
             };
           in
           {
-            flake.pointy = with pointyLib; {
-              stepConfig = evalStepConfig cfg;
-              presets = evalPresets cfg;
-              projects = evalProjects cfg;
-              stepDefs = evalStepDefs cfg;
-              srcFiles = cfg.srcFiles;
-              dependencies = evalDependencies cfg;
-            };
+            flake.pointy =
+              with pointyLib;
+              {
+                stepConfig = evalStepConfig cfg;
+                presets = evalPresets cfg;
+                projects = evalProjects cfg;
+                stepDefs = evalStepDefs cfg;
+                srcFiles = cfg.srcFiles;
+                dependencies = evalDependencies cfg;
+                # Semantic kernel, when pointy.semantic.enable: handles +
+                # presenter metadata + transport documents + derivation
+                # views.  Merged here so flake.pointy keeps a single
+                # definer.
+              }
+              // cfg.semantic.result;
             perSystem =
               { pkgs, ... }:
               {

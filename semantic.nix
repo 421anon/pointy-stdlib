@@ -58,6 +58,12 @@ in
       default = { };
       description = "Observation-interface name -> optional bundle overrides ({ interface; program }) over the language flake's pointyScanners.<system>.<name>.";
     };
+    result = lib.mkOption {
+      internal = true;
+      type = lib.types.attrs;
+      default = { };
+      description = "Computed semantic kernel; merged into flake.pointy by the default module (the sole definer of that output).";
+    };
   };
 
   config = lib.mkIf sel.enable (
@@ -304,11 +310,9 @@ in
       certificates = resolvableMap (h: h.certificate);
     in
     {
-      # One domain surface; flake-parts' packages tree accepts a single
-      # packages.pointy definition (the raw steps aggregate), so the
-      # semantic kernel and its derivation views live next to the other
-      # pointy metadata at the flake root.
-      flake.pointy = {
+      # Computed kernel, merged into flake.pointy by the default module
+      # (flake outputs accept a single definer per attribute).
+      pointy.semantic.result = {
         inherit handles unresolvable notebookAdapter transport;
         inherit checked certificates;
         contractModel = sharedModel;
