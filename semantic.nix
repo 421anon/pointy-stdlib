@@ -1,12 +1,10 @@
 # Semantic host adapter: one pointy-language contract layer over the raw
-# steps.  Activated by `pointy.semantic.enable = true` in a host repo's
-# pointy config; the stdlib itself stays language-agnostic — the host
-# supplies the pointy language flake and its build pkgs.
+# steps.  Always active: the stdlib itself stays language-agnostic — the
+# host supplies the pointy language flake and its build pkgs.
 #
 # The host config is exactly:
 #   semantic = {
-#     enable = true;
-#     language = inputs.pointy-lang;   # must expose lib.<system> and
+#     language = inputs.pointy-stdlib.language;   # must expose lib.<system> and
 #                                       # pointyScanners.<system>
 #     pkgs = pkgs;                      # the pkgs the raw steps build with
 #     source = ./main.pointy;
@@ -15,14 +13,21 @@
 #     }                                 #   language.pointyScanners.<system>.<name>)
 #
 # Templates carry the contract convention:
-#   contract = { interface; output; parameters = [ { param; option; } ... ]; }
-# i.e. the semantic parameter partition is authored once per template, in
-# projection order; the adapter derives the projections, the presenter
-# specs, and the transport documents from that single declaration.
+#   contract = {
+#     interface = "...";                # the struct applied per record
+#     output = "...";                   # the exact named output certified
+#     parameters = [                    # projection, in order
+#       { param = "..."; kind ? "value"; } ...
+#     ];
+#   };
+#   bindings.<param> = { ... }          # presentation/default overlay
+#   builderArgs.<name> = { ... }        # adapter-owned editable inputs
+# The template table and its kinds/defaults form the adapter's side of
+# the host merge; the conformance check compares them against the core's
+# interface descriptions and declared defaults (as build-time inputs).
 #
 # The kernel is computed at flake level (pkgs comes from the host option);
-# only derivation views are added to packages.pointy, which is typed
-# `package`.
+# derivation views land in packages.pointy, typed `package`.
 { pointyLib }:
 top:
 let
@@ -31,22 +36,17 @@ let
 in
 {
   options.pointy.semantic = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Derive per-step semantic handles, presenter metadata, and transport documents over the raw steps.";
-    };
     language = lib.mkOption {
       type = lib.types.raw;
-      description = "The pointy language flake input (semantic core + scanner bundles). Required when enable = true.";
+      description = "The pointy language flake (semantic core + scanner bundles); take the stdlib export `inputs.pointy-stdlib.language`. Required.";
     };
     pkgs = lib.mkOption {
       type = lib.types.raw;
-      description = "The pkgs to build raw steps and sources with. Required when enable = true.";
+      description = "The pkgs to build raw steps and sources with. Required.";
     };
     source = lib.mkOption {
       type = lib.types.raw;
-      description = "Entry program source (conventionally main.pointy). Required when enable = true.";
+      description = "Entry program source (conventionally main.pointy). Required.";
     };
     modules = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
@@ -62,11 +62,11 @@ in
       internal = true;
       type = lib.types.attrs;
       default = { };
-      description = "Computed semantic kernel; merged into flake.pointy by the default module (the sole definer of that output).";
+      description = "Computed semantic kernel; merged into flake.pointy by the default module.";
     };
   };
 
-  config = lib.mkIf sel.enable (
+  config = (
     let
       # Per-system kernels are fixed by mkFlake (systems = [ "x86_64-linux" ]).
       system = "x86_64-linux";
@@ -90,39 +90,34 @@ in
       resolvedScanners = builtins.mapAttrs resolveBundle sel.scanners;
 
       # Structural projection composed from a template's declared
-      # contract.parameters: param -> the application parameter name,
-      # option -> the resolved builder option it reads.  The list is the
-      # projection order.
+      # contract.parameters over the canonical call args: each projected
+      # argument is read from args.<param> (records and call args are
+      # param-keyed).  The list is the projection order.
       projectionOf = contract: args:
         builtins.listToAttrs (builtins.map (pair: {
           name = pair.param;
-          value = builtins.getAttr pair.option args;
+          value = args.${pair.param};
         }) contract.parameters);
 
       templates = top.config.pointy.templates;
       records = top.config.pointy.stepDefs;
+      # One authored table per template (parameters, kinds, defaults,
+      # builder args), validated at the first consumer.
+      metas = pointyLib.templateMeta templates;
+
       # Same evaluation the default module publishes as packages.pointy.steps
       # (identical derivations — same function, args, pkgs), computed here
       # because the kernel needs it at flake level.
       steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs; });
-
-      compiledTemplates = builtins.mapAttrs (
-        _: tpl:
-        tpl.compile {
-          lib = top.lib;
-          inherit pkgs pointyLib;
-        }
-      ) templates;
 
       # ---- Semantic sources --------------------------------------------
       #
       # entryTree assembles the minimal source-relative layout the entry
       # program's imports rely on: main.pointy at the root plus every
       # enrolled module copied to its declared relative path, sourced
-      # from its scanner bundle interface (no vendored copies in host
-      # repos).  Copied, not symlinked: the core's containment audit
-      # rejects symlink escapes, and only these files feed the model
-      # chain.
+      # from its scanner bundle interface.  Copied, not symlinked: the
+      # core's containment audit rejects symlink escapes, and these
+      # files feed the model chain.
       moduleSources = builtins.mapAttrs (name: rel:
         {
           inherit rel;
@@ -176,19 +171,19 @@ in
       #
       # The raw pipeline resolves step references to derivations and
       # stamps meta.pointy = { id, args }; args are re-wrapped to sibling
-      # handles via the same compiled-option classification the raw
-      # pipeline resolves with.
+      # handles through the same contract parameter kinds the raw
+      # pipeline resolves with (subject/subjects/listSubject).  Declared
+      # contract parameters of those kinds participate as references;
+      # record fields stay ordinary values.
       handleOfStep = value:
-        handles.${builtins.toString value.meta.pointy.id}
-          or (throw "pointy.semantic: resolved step option value is missing meta.pointy.id");
-      wrapHandles = name: opts: value:
-        let
-          argTypes = opts.${name}.type.description.type or { };
-        in
-        if argTypes ? step then handleOfStep value
-        else if argTypes ? list && argTypes.list ? step then
+        handles.${builtins.toString value.meta.pointy.id} or (throw "pointy.semantic: resolved step reference is missing meta.pointy.id");
+      wrapHandles = kind: value:
+        if kind == "subject" || kind == "listSubject" then
+          handleOfStep value
+        else if kind == "subjects" then
           builtins.map handleOfStep value
-        else value;
+        else
+          value;
 
       # ---- Per-record handles --------------------------------------------
       #
@@ -198,7 +193,7 @@ in
       # dependency graphs are DAGs.
       handleResult = id: rec_:
         let
-          opts = compiledTemplates.${rec_.type}.options;
+          meta = metas.${rec_.type};
           rawStep = steps.${id};
           resolvedEv = builtins.tryEval rawStep.drvPath;
         in
@@ -210,12 +205,32 @@ in
         }
         else
           let
-            resolvedHandles = builtins.mapAttrs (name: wrapHandles name opts)
-              rawStep.meta.pointy.args;
-            callArgs = builtins.mapAttrs (name: opt:
-              if builtins.hasAttr name resolvedHandles then resolvedHandles.${name}
-              else opt.default) (builtins.removeAttrs opts [ "id" ])
-              // { inherit id; };
+            resolvedHandles = builtins.mapAttrs (argName: value:
+              if meta.paramKinds ? ${argName} then
+                wrapHandles meta.paramKinds.${argName} value
+              else
+                value
+            ) rawStep.meta.pointy.args;
+            # Effective call arguments, canonical and param-keyed:
+            # authored defaults under the record's resolved values
+            # (record wins; resolvedHandles already carries the raw step's
+            # param-keyed canonical args), plus the record id.  The
+            # projection reads contract parameters out of this same
+            # union, so semantics and the raw builder consume identical
+            # effective arguments.  A defaulted empty reference list
+            # becomes the canonical empty { subjects = [ ]; } envelope
+            # under the subject param's name: the checker rejects a bare
+            # [] for a subjects-kind parameter.
+            callArgs = builtins.mapAttrs (argName: value:
+              if
+                meta.paramKinds ? ${argName}
+                && meta.paramKinds.${argName} == "subjects"
+                && value == [ ]
+              then
+                { subjects = [ ]; }
+              else
+                value
+            ) (meta.defaults // resolvedHandles // { inherit id; });
             contract = templates.${rec_.type}.contract;
           in
           (langLib.mkSidecar {
@@ -254,67 +269,39 @@ in
       # ---- Presenter metadata --------------------------------------------
       #
       # Per-template parameter specs from the declared
-      # contract.parameters partition plus the compiled option schemas;
-      # never reads MODEL bytes.
-      paramSpecFor = name:
-        let
-          params = templates.${name}.contract.parameters
-            or (throw "pointy.template `${name}': contract.parameters missing");
-          paramNames = builtins.map (p: p.param) params;
-          dupes = builtins.filter (n:
-            builtins.length (builtins.filter (x: x == n) paramNames) > 1)
-            (lib.unique paramNames);
-        in
-        builtins.seq
-          (if dupes != [ ] then
-            throw ("pointy.template `${name}': duplicate contract.parameters name(s): "
-              + builtins.concatStringsSep ", " dupes)
-          else null) params;
+      # contract.parameters partition plus the binding table.  The table
+      # is the host side of the merge the conformance check validates
+      # against the core; evaluation never reads MODEL bytes.
+      # ---- Host documents (build inputs) -------------------------------
+      #
+      # The host's core argument schema: generated by the core over the
+      # host's OWN enrolled sources (`pointy check --schema`), a
+      # derivation output.  The stepConfig derivation (default module)
+      # and the host conformance check consume it, and evaluation reads
+      # it through the user-authorized IFD for construction defaults.
+      # `adapter` is the host's plain-data presentation
+      # table (contract metadata + optional bindings + builderArgs) the
+      # merge validates against the schema with unknown override names
+      # rejected.
+      contractSchema = pointyLib.mkContractSchema {
+        inherit pkgs;
+        pointy = sel.language.packages.${system}.pointy;
+        entryTree = entryTree;
+        modules = sel.modules;
+      };
 
-      templateAdapter = name: tpl:
-        let
-          opts = compiledTemplates.${name}.options;
-          pairs = paramSpecFor name;
-          params = builtins.listToAttrs (
-            lib.imap0 (i: pair:
-              let
-                opt = opts.${pair.option}
-                  or (throw "pointy.template `${name}': contract.parameters references unknown option `${pair.option}'");
-                d = opt.type.description or { };
-              in
-              {
-                name = pair.param;
-                value = {
-                  order = i;
-                  displayName = d.displayName or null;
-                  description = d.description or null;
-                  type = d.type or null;
-                  default = opt.default or null;
-                };
-              }
-            ) pairs
-          );
-        in
-        {
-          interface = tpl.contract.interface;
-          displayName = tpl.displayName or null;
-          icon = tpl.icon or null;
-          sortKey = tpl.sortKey or null;
-          description = tpl.description or null;
-          parameters = params;
-        };
-
-      notebookAdapter = builtins.toJSON (builtins.mapAttrs templateAdapter templates);
+      adapter = pointyLib.hostAdapter templates;
 
       checked = resolvableMap (h: h.target);
       certificates = resolvableMap (h: h.certificate);
     in
     {
       # Computed kernel, merged into flake.pointy by the default module
-      # (flake outputs accept a single definer per attribute).
+      # (flake outputs accept one definer per attribute).
       pointy.semantic.result = {
-        inherit handles unresolvable notebookAdapter transport;
-        inherit checked certificates;
+        inherit handles unresolvable transport;
+        inherit checked certificates adapter;
+        inherit contractSchema;
         contractModel = sharedModel;
       };
     }

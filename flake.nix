@@ -6,6 +6,9 @@
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
     };
+    pointy-lang = {
+      url = "path:/root/src/pointy-lang";
+    };
   };
 
   outputs =
@@ -13,6 +16,7 @@
       self,
       nixpkgs,
       flake-parts,
+      pointy-lang,
     }:
     let
       pointyLib = import ./lib.nix inputs pointyLib;
@@ -20,6 +24,8 @@
     in
     {
       lib = pointyLib;
+      # The pointy language flake hosts take as `semantic.language`.
+      language = pointy-lang;
 
       flakeModules = {
         semantic = semanticModule;
@@ -47,16 +53,23 @@
             flake.pointy =
               with pointyLib;
               {
-                stepConfig = evalStepConfig cfg;
+                # stepConfig is host-generated from the CORE schema: the
+                # flake output is the realized merge derivation (built
+                # from the host contractSchema over the enrolled
+                # sources).  Semantic is always on.
+                stepConfig = mkStepConfig {
+                  pkgs = cfg.semantic.pkgs;
+                  schema = cfg.semantic.result.contractSchema;
+                  inherit (cfg) templates;
+                };
                 presets = evalPresets cfg;
                 projects = evalProjects cfg;
                 stepDefs = evalStepDefs cfg;
                 srcFiles = cfg.srcFiles;
                 dependencies = evalDependencies cfg;
-                # Semantic kernel, when pointy.semantic.enable: handles +
-                # presenter metadata + transport documents + derivation
-                # views.  Merged here so flake.pointy keeps a single
-                # definer.
+                # The semantic kernel: handles + presenter metadata +
+                # transport documents + derivation views.  Merged here so
+                # flake.pointy keeps a single definer.
               }
               // cfg.semantic.result;
             perSystem =
@@ -68,7 +81,10 @@
                       with pointyLib;
                       fakeDrv
                       // {
-                        steps = evalSteps <| cfg // { inherit pkgs; };
+                        steps = evalSteps <| cfg // {
+                          inherit pkgs;
+                          contractSchema = cfg.semantic.result.contractSchema;
+                        };
                         projectOutPaths = evalProjectOutPaths <| cfg // { inherit pkgs; };
                         autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
                       };
