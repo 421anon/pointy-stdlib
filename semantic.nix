@@ -62,9 +62,9 @@ in
     };
 
     perSystem =
-      { pkgs, system, ... }:
+      { pkgs, system, inputs', ... }:
       let
-        langFlake = top.inputs.${sel.language-input};
+        langFlake = inputs'.${sel.language-input};
         langLib = langFlake.lib.${system};
 
         resolveBundle = name: spec:
@@ -101,7 +101,7 @@ in
         compiledTemplates = builtins.mapAttrs (
           _: tpl:
           tpl.compile {
-            lib = top.inputs.nixpkgs/lib;
+            lib = top.lib;
             inherit pkgs pointyLib;
           }
         ) templates;
