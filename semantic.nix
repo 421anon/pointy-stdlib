@@ -28,10 +28,9 @@ in
       default = false;
       description = "Derive per-step semantic handles, presenter metadata, and transport documents over the raw steps.";
     };
-    language-input = lib.mkOption {
-      type = lib.types.str;
-      default = "pointy-lang";
-      description = "Flake input name of the pointy language (semantic core + scanner bundles).";
+    language = lib.mkOption {
+      type = lib.types.raw;
+      description = "The pointy language flake input (semantic core + scanner bundles). Required when enable = true.";
     };
     source = lib.mkOption {
       type = lib.types.raw;
@@ -55,22 +54,21 @@ in
     # the dependency is acyclic — only the host-authored semantic options
     # feed the kernel).
     flake.pointy = {
-      handles = top.inputs.self.packages.x86_64-linux.pointy.semantic.handles;
-      unresolvable = top.inputs.self.packages.x86_64-linux.pointy.semantic.unresolvable;
-      notebookAdapter = top.inputs.self.packages.x86_64-linux.pointy.semantic.notebookAdapter;
-      transport = top.inputs.self.packages.x86_64-linux.pointy.semantic.transport;
+      handles = top.self.packages.x86_64-linux.pointy.semantic.handles;
+      unresolvable = top.self.packages.x86_64-linux.pointy.semantic.unresolvable;
+      notebookAdapter = top.self.packages.x86_64-linux.pointy.semantic.notebookAdapter;
+      transport = top.self.packages.x86_64-linux.pointy.semantic.transport;
     };
 
     perSystem =
-      { pkgs, system, inputs', ... }:
+      { pkgs, system, ... }:
       let
-        langFlake = inputs'.${sel.language-input};
-        langLib = langFlake.lib.${system};
+        langLib = sel.language.lib.${system};
 
         resolveBundle = name: spec:
           let
-            bundle = langFlake.pointyScanners.${system}.${name} or
-              throw "pointy.semantic: no scanner bundle `${name}' in ${sel.language-input}.pointyScanners.${system}";
+            bundle = sel.language.pointyScanners.${system}.${name} or
+              throw "pointy.semantic: no scanner bundle `${name}' in the language flake's pointyScanners.${system}";
           in
           {
             interface = spec.interface or bundle.interface;
