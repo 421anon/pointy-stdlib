@@ -313,6 +313,10 @@ in
       # instead.
       perSystem = { ... }: {
         packages.pointy = {
+          # Aggregates must carry the derivation marker to satisfy the
+          # `package` type (same trick the raw steps aggregate uses).
+          type = "derivation";
+          name = "pointy-semantic";
           inherit checked certificates;
           contractModel = sharedModel;
         };
