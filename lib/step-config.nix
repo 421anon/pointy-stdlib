@@ -277,7 +277,7 @@ let
   # adapter: { <name> = { interface; parameters; bindings; builderArgs;
   #                        sortKey; displayName; description; icon;
   #                        pointyType }; ... }
-  #   parameters = [ { param; option ? param; kind ?; default ? } ... ]
+  #   parameters = [ { param; kind ?; } ... ]
   renderStepConfig = { schema, adapter }:
     let
       interfaces = readSchema schema;
@@ -303,11 +303,9 @@ let
           && acc
         ) true schemaParams;
         _validate = builtins.seq _covered validatedOverlays;
-        optionOf = p:
-          (builtins.head (builtins.filter (x: x.param == p) params)).option or p;
         args = builtins.seq _validate (builtins.listToAttrs (
           builtins.map (sp: {
-            name = optionOf sp.parameter;
+            name = sp.parameter;
             value = semanticArg sp (bindings.${sp.parameter} or { });
           }) schemaParams
           ++ builtins.map (n: {
