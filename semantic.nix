@@ -10,9 +10,9 @@
 #                                       # pointyScanners.<system> when overridden
 #     pkgs = pkgs;                      # the pkgs the raw steps build with
 #     source = ./main.pointy;
-#     modules.csv = "ext/csv.pointy";   # logical name -> source-relative path
-#     scanners.csv = { };               # name -> bundle overrides ({} = take
-#     }                                 #   language.pointyScanners.<system>.<name>)
+#     modules.csv = "ext/csv.pointy";   # OPTIONAL: stdlib default pre-enrolls
+#     scanners.csv = { };               # the csv observation module and its
+#     }                                 # language bundle; override/extend per key
 #
 # Templates carry the contract convention:
 #   contract = {
@@ -53,13 +53,17 @@ in
     };
     modules = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = { };
-      description = "Logical module name -> source-relative path the entry program imports it at.";
+      default = {
+        csv = "ext/csv.pointy";
+      };
+      description = "Logical module name -> source-relative path the entry program imports it at. The csv observation module is pre-enrolled by default; hosts extend or override per key.";
     };
     scanners = lib.mkOption {
       type = lib.types.attrsOf lib.types.attrs;
-      default = { };
-      description = "Observation-interface name -> optional bundle overrides ({ interface; program }) over the language flake's pointyScanners.<system>.<name>.";
+      default = {
+        csv = { };
+      };
+      description = "Observation-interface name -> optional bundle overrides ({ interface; program }) over the language flake's pointyScanners.<system>.<name>. The csv bundle is pre-enrolled with its stdlib interface variant by default; hosts extend or override per key.";
     };
     result = lib.mkOption {
       internal = true;
