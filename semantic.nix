@@ -4,8 +4,10 @@
 #
 # The host config is exactly:
 #   semantic = {
-#     language = inputs.pointy-stdlib.language;   # must expose lib.<system> and
-#                                       # pointyScanners.<system>
+#     language = inputs.pointy-stdlib.language;   # OPTIONAL: defaults to the
+#                                       # stdlib's own pointy-lang input; must
+#                                       # expose lib.<system> and
+#                                       # pointyScanners.<system> when overridden
 #     pkgs = pkgs;                      # the pkgs the raw steps build with
 #     source = ./main.pointy;
 #     modules.csv = "ext/csv.pointy";   # logical name -> source-relative path
@@ -28,7 +30,7 @@
 #
 # The kernel is computed at flake level (pkgs comes from the host option);
 # derivation views land in packages.pointy, typed `package`.
-{ pointyLib }:
+{ pointyLib, pointy-lang }:
 top:
 let
   lib = top.lib;
@@ -38,7 +40,8 @@ in
   options.pointy.semantic = {
     language = lib.mkOption {
       type = lib.types.raw;
-      description = "The pointy language flake (semantic core + scanner bundles); take the stdlib export `inputs.pointy-stdlib.language`. Required.";
+      default = pointy-lang;
+      description = "The pointy language flake (semantic core + scanner bundles). Defaults to this stdlib flake's own `pointy-lang` input; pass a fork or a separately pinned flake to override.";
     };
     pkgs = lib.mkOption {
       type = lib.types.raw;

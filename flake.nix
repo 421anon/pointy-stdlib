@@ -20,7 +20,10 @@
     }:
     let
       pointyLib = import ./lib.nix inputs pointyLib;
-      semanticModule = import ./semantic.nix { inherit pointyLib; };
+      semanticModule = import ./semantic.nix {
+        inherit pointyLib;
+        inherit (inputs) pointy-lang;
+      };
     in
     {
       lib = pointyLib;
