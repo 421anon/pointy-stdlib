@@ -5,8 +5,8 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1788718575,
-        "narHash": "sha256-AisPV7nMpHaVvs9hTLOMjzjIEHAGw2hFEcl6DeV1SD4=",
+        "lastModified": 1788827418,
+        "narHash": "sha256-ULxWitKnZQUo4LRZzFSCCvqHCdPxmMF5+t3lfF3K8Rg=",
         "path": "/root/src/pointy-lang/fixtures/flake",
         "type": "path"
       },
@@ -201,7 +201,7 @@
       },
       "locked": {
         "lastModified": 0,
-        "narHash": "sha256-zYj9hVtecBGdX9ds9V+V+zDDoIaGFtR1mzht7ussfPo=",
+        "narHash": "sha256-r3jGQk7LgYGrhL3uKnIYnKBMXKZzJHKxQtNbu0SnJLo=",
         "path": "/root/src/pointy-lang",
         "type": "path"
       },
@@ -216,8 +216,8 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1788814632,
-        "narHash": "sha256-Fm16SiKlXU+mFgwwx2w/+B8gHR52v5g905YnLXBdUy8=",
+        "lastModified": 1788954326,
+        "narHash": "sha256-hTTzJhnNE/k0wLgOd0d9PsjxJfpU3piTsuz93preR4A=",
         "path": "/root/src/pointy-lang-stdlib",
         "type": "path"
       },
