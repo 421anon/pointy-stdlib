@@ -3,11 +3,18 @@
     nixpkgs = {
       url = "github:NixOS/nixpkgs";
     };
+    # flake-parts' lib comes from this flake's nixpkgs (upstream's
+    # recommended wiring), so a host that follows this flake's nixpkgs
+    # gets one nixpkgs for the whole graph.
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
+      inputs.nixpkgs-lib.follows = "nixpkgs";
     };
+    # The compiler builds with this flake's nixpkgs; the host decides
+    # that nixpkgs by following this flake's own nixpkgs.
     pointy-lang = {
       url = "path:/root/src/pointy-lang";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
