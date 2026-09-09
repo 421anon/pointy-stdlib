@@ -5,6 +5,21 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
+        "lastModified": 1788863943,
+        "narHash": "sha256-zx7XHtUZqgbS0ve4u83W1NaXuz9QhpIwCA3zV6pFVFg=",
+        "path": "/root/src/pointy-lang/fixtures/flake",
+        "type": "path"
+      },
+      "original": {
+        "path": "/root/src/pointy-lang/fixtures/flake",
+        "type": "path"
+      }
+    },
+    "fixtures_2": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_6"
+      },
+      "locked": {
         "lastModified": 1788827418,
         "narHash": "sha256-ULxWitKnZQUo4LRZzFSCCvqHCdPxmMF5+t3lfF3K8Rg=",
         "path": "/root/src/pointy-lang/fixtures/flake",
@@ -54,6 +69,42 @@
     "flake-parts_3": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib_3"
+      },
+      "locked": {
+        "lastModified": 1788450739,
+        "narHash": "sha256-glZLQlzIn1fXH6PazR2iUmTo7kzzyYSshrWhLS9TqCU=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "31729ca8cbdb4fa927b34e5f4353e6a83f39e993",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_4": {
+      "inputs": {
+        "nixpkgs-lib": "nixpkgs-lib_4"
+      },
+      "locked": {
+        "lastModified": 1788450739,
+        "narHash": "sha256-glZLQlzIn1fXH6PazR2iUmTo7kzzyYSshrWhLS9TqCU=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "31729ca8cbdb4fa927b34e5f4353e6a83f39e993",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_5": {
+      "inputs": {
+        "nixpkgs-lib": "nixpkgs-lib_5"
       },
       "locked": {
         "lastModified": 1772408722,
@@ -115,6 +166,36 @@
       }
     },
     "nixpkgs-lib_3": {
+      "locked": {
+        "lastModified": 1788057806,
+        "narHash": "sha256-DTQSMxzDWmT0zhguthvegnVkn7CFqGCv4IHCzk5ZUpM=",
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "rev": "596e2e3940e09b2abbeb03f75fa1828c57fcd72c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "type": "github"
+      }
+    },
+    "nixpkgs-lib_4": {
+      "locked": {
+        "lastModified": 1788057806,
+        "narHash": "sha256-DTQSMxzDWmT0zhguthvegnVkn7CFqGCv4IHCzk5ZUpM=",
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "rev": "596e2e3940e09b2abbeb03f75fa1828c57fcd72c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nixpkgs.lib",
+        "type": "github"
+      }
+    },
+    "nixpkgs-lib_5": {
       "locked": {
         "lastModified": 1772328832,
         "narHash": "sha256-e+/T/pmEkLP6BHhYjx6GmwP5ivonQQn0bJdH9YrRB+Q=",
@@ -179,6 +260,69 @@
     },
     "nixpkgs_5": {
       "locked": {
+        "lastModified": 1788823811,
+        "narHash": "sha256-EDg/CJvIqSnCobkTcrzNx49gQtLGKqSnjVJy+H1Bxrw=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "15721fe9a43a1548816cd235ae287eca32608452",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_6": {
+      "locked": {
+        "lastModified": 1767012506,
+        "narHash": "sha256-bkTWmsS12pVUOvzS0/9+zDJeBENbMdcIqtwrEVgv2SY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      }
+    },
+    "nixpkgs_7": {
+      "locked": {
+        "lastModified": 1767012506,
+        "narHash": "sha256-bkTWmsS12pVUOvzS0/9+zDJeBENbMdcIqtwrEVgv2SY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      }
+    },
+    "nixpkgs_8": {
+      "locked": {
+        "lastModified": 1767012506,
+        "narHash": "sha256-bkTWmsS12pVUOvzS0/9+zDJeBENbMdcIqtwrEVgv2SY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      }
+    },
+    "nixpkgs_9": {
+      "locked": {
         "lastModified": 1767012506,
         "narHash": "sha256-bkTWmsS12pVUOvzS0/9+zDJeBENbMdcIqtwrEVgv2SY=",
         "owner": "NixOS",
@@ -201,7 +345,7 @@
       },
       "locked": {
         "lastModified": 0,
-        "narHash": "sha256-r3jGQk7LgYGrhL3uKnIYnKBMXKZzJHKxQtNbu0SnJLo=",
+        "narHash": "sha256-lJgDxIWIzFzxphFr1zcO0FpY4JoqRKBmmNuSbu77c4o=",
         "path": "/root/src/pointy-lang",
         "type": "path"
       },
@@ -216,6 +360,22 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
+        "lastModified": 1788954611,
+        "narHash": "sha256-FgYmDElFEDtqHkCgj9UEoCWfud1z+kTCMa3jlUsD9Ok=",
+        "path": "/root/src/pointy-lang-stdlib",
+        "type": "path"
+      },
+      "original": {
+        "path": "/root/src/pointy-lang-stdlib",
+        "type": "path"
+      }
+    },
+    "pointy-lang-stdlib_2": {
+      "inputs": {
+        "flake-parts": "flake-parts_4",
+        "nixpkgs": "nixpkgs_8"
+      },
+      "locked": {
         "lastModified": 1788954326,
         "narHash": "sha256-hTTzJhnNE/k0wLgOd0d9PsjxJfpU3piTsuz93preR4A=",
         "path": "/root/src/pointy-lang-stdlib",
@@ -226,10 +386,45 @@
         "type": "path"
       }
     },
+    "pointy-lang_2": {
+      "inputs": {
+        "fixtures": "fixtures_2",
+        "nixpkgs": "nixpkgs_7",
+        "pointy-lang-stdlib": "pointy-lang-stdlib_2",
+        "pointy-stdlib": "pointy-stdlib_2"
+      },
+      "locked": {
+        "lastModified": 0,
+        "narHash": "sha256-r3jGQk7LgYGrhL3uKnIYnKBMXKZzJHKxQtNbu0SnJLo=",
+        "path": "/root/src/pointy-lang",
+        "type": "path"
+      },
+      "original": {
+        "path": "/root/src/pointy-lang",
+        "type": "path"
+      }
+    },
     "pointy-stdlib": {
       "inputs": {
         "flake-parts": "flake-parts_3",
-        "nixpkgs": "nixpkgs_5"
+        "nixpkgs": "nixpkgs_5",
+        "pointy-lang": "pointy-lang_2"
+      },
+      "locked": {
+        "lastModified": 1788954612,
+        "narHash": "sha256-fDWWiJaK+oqnbdc5Va8QXoRVWMBCij5JoypDkWoO7vg=",
+        "path": "/root/src/pointy-stdlib",
+        "type": "path"
+      },
+      "original": {
+        "path": "/root/src/pointy-stdlib",
+        "type": "path"
+      }
+    },
+    "pointy-stdlib_2": {
+      "inputs": {
+        "flake-parts": "flake-parts_5",
+        "nixpkgs": "nixpkgs_9"
       },
       "locked": {
         "lastModified": 1788822980,
