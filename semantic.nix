@@ -73,17 +73,18 @@ in
 
       templates = top.config.pointy.templates;
       records = top.config.pointy.stepDefs;
+      modulesFile = builtins.toFile "pointy-modules.json" (builtins.toJSON sel.modules);
       contractSchema = pointyLib.mkContractSchema {
         inherit pkgs;
         pointy = sel.language.packages.${system}.pointy;
         entryTree = entryTree;
-        modules = sel.modules;
+        inherit modulesFile;
       };
       coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
       metas = pointyLib.templateMeta { inherit templates; schema = coreSchema; };
 
       # The same eval the default module publishes as packages.pointy.steps.
-      steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs contractSchema; });
+      steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs metas; });
 
       # ---- Semantic sources --------------------------------------------
       #
@@ -171,7 +172,7 @@ in
                 value
             ) rawStep.meta.pointy.args;
             contract = templates.${rec_.type}.contract;
-            callArgs = meta.coreDefaults // meta.defaults // resolvedHandles // { inherit id; };
+            callArgs = meta.defaults // resolvedHandles // { inherit id; };
           in
           (langLib.mkSidecar {
             source = entrySource;
@@ -201,14 +202,11 @@ in
           name = "pointy-applications.json";
           apps = resolvableMap (h: h.pointyInternals.entry);
         };
-        modules = builtins.toFile "pointy-modules.json"
-          (builtins.toJSON sel.modules);
+        modules = modulesFile;
         entryTree = entryTree;
       };
 
       # ---- Presenter metadata --------------------------------------------
-      adapter = pointyLib.hostAdapter templates;
-
       checked = resolvableMap (h: h.target);
       certificates = resolvableMap (h: h.certificate);
     in
@@ -216,7 +214,7 @@ in
       # Merged into flake.pointy by the default module.
       pointy.semantic.result = {
         inherit unresolvable transport;
-        inherit checked certificates adapter;
+        inherit checked certificates;
         inherit contractSchema;
         contractModel = sharedModel;
       };

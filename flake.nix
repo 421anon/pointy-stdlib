@@ -21,7 +21,7 @@
       pointy-lang,
     }:
     let
-      pointyLib = import ./lib.nix inputs pointyLib;
+      pointyLib = import ./lib.nix inputs;
       semanticModule = import ./semantic.nix {
         inherit pointyLib;
         inherit (inputs) pointy-lang;
@@ -49,6 +49,11 @@
           config =
             let
               cfg = top.config.pointy;
+              semantic = cfg.semantic.result;
+              metas = pointyLib.templateMeta {
+                inherit (cfg) templates;
+                schema = builtins.fromJSON (builtins.readFile (toString semantic.contractSchema));
+              };
               fakeDrv = {
                 type = "derivation";
                 name = "";
@@ -60,18 +65,16 @@
                 {
                   # `nix eval --json '.#pointy.stepConfig'` yields the document.
                   stepConfig = renderStepConfig {
-                    schema = builtins.fromJSON (builtins.readFile (toString cfg.semantic.result.contractSchema));
-                    adapter = cfg.semantic.result.adapter;
+                    inherit (cfg) templates;
+                    inherit metas;
                   };
                   presets = evalPresets cfg;
                   projects = evalProjects cfg;
                   stepDefs = evalStepDefs cfg;
                   srcFiles = cfg.srcFiles;
-                  dependencies = evalDependencies (cfg // {
-                    contractSchema = cfg.semantic.result.contractSchema;
-                  });
+                  dependencies = evalDependencies (cfg // { inherit metas; });
                 }
-                // cfg.semantic.result;
+                // semantic;
               perSystem =
                 { pkgs, ... }:
                 {
@@ -82,12 +85,10 @@
                         fakeDrv
                         // {
                           steps = evalSteps <| cfg // {
-                            inherit pkgs;
-                            contractSchema = cfg.semantic.result.contractSchema;
+                            inherit pkgs metas;
                           };
                           projectOutPaths = evalProjectOutPaths <| cfg // {
-                            inherit pkgs;
-                            contractSchema = cfg.semantic.result.contractSchema;
+                            inherit pkgs metas;
                           };
                           autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
                         };

@@ -9,7 +9,6 @@ Nix flake library that turns a user repository into the flake outputs that [Poin
 - `#pointy.checked` / `#pointy.certificates` — per-record semantic results, keyed by record id; records the raw pipeline rejects are omitted here and listed in `#pointy.unresolvable`
 - `#pointy.transport` — the canonical applications document, the enrolled module map, and the assembled entry-source tree
 - `#pointy.contractModel` — the shared contract model over the entry sources
-- `#pointy.adapter` — the host's plain-data presentation table that `#pointy.stepConfig` merges
 - `#pointy.stepDefs` — step instance definitions
 - `#pointy.projects` — project membership and ordering
 - `#pointy.srcFiles` — per-step source files
@@ -17,13 +16,12 @@ Nix flake library that turns a user repository into the flake outputs that [Poin
 - per-system `#pointy.steps.<id>` and `#pointy.projectOutPaths` — buildable derivations
 
 The core authority carries into record keying: step records and every
-adapter-side argument map (`knownArgs`, resolution, dependencies,
+host-side argument map (`knownArgs`, resolution, dependencies,
 semantic handles/conformance, and the template `compile` args) are keyed
 by the core schema's `parameter` name.  Templates declare only
 `contract.interface` (and optionally `contract.output`, which defaults
-to `"out"`); parameter names, order,
-kinds, shapes, defaults, and requiredness come from
-`#pointy.contractSchema`.
+to `"out"`); parameter names, order, kinds, shapes, defaults, and
+requiredness come from `#pointy.contractSchema`.
 
 ## Host configuration
 

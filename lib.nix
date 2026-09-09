@@ -4,10 +4,10 @@
   flake-parts,
   ...
 }:
-pointyLib: rec {
+rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
-  stepConfigPure = import ./lib/step-config.nix { };
+  renderStepConfig = (import ./lib/step-config.nix).renderStepConfig;
 
   api = {
     inherit
@@ -32,12 +32,27 @@ pointyLib: rec {
 
   # ---- Contract / construction tables --------------------------------
   #
-  # Parameter names, order, kind, shape, domain, default, and
-  # requiredness come from the core schema.
+  # The core schema is the single authority for parameter names, order,
+  # kind, shape, domain, default, and requiredness.  `templateMeta` is
+  # its one reader: it checks the ABI, validates each template's
+  # bindings against the core, and derives the construction tables.
   templateMeta =
     { templates, schema }:
     let
-      interfaces = schema.interfaces or (throw "pointy.templateMeta: schema has no `interfaces` table");
+      schemaFormat = "pointy-argument-schema";
+      schemaVersion = 1;
+      format = schema.format or (throw "pointy core schema: missing `format`");
+      version = schema.version or (throw "pointy core schema: missing `version`");
+      _abi =
+        if format != schemaFormat then
+          throw "pointy core schema: unsupported format `${format}` (expected `${schemaFormat}`)"
+        else if version != schemaVersion then
+          throw "pointy core schema: unsupported version `${toString version}` (expected ${toString schemaVersion})"
+        else
+          null;
+      interfaces = builtins.seq _abi (
+        schema.interfaces or (throw "pointy core schema: missing `interfaces` table")
+      );
     in
     builtins.mapAttrs (
       name: template:
@@ -87,12 +102,9 @@ pointyLib: rec {
             value = builderArgs.${n}.default;
           }) (builtins.filter (n: builderArgs.${n} ? default) (builtins.attrNames builderArgs))
         );
-        requiredArgs =
-          builtins.filter (n: !(builderArgs.${n} ? default)) (builtins.attrNames builderArgs)
-          ++ specialArgs;
       in
       builtins.seq _validated {
-        inherit params builderArgs;
+        inherit interface params;
         output = contract.output or "out";
         paramKinds = builtins.listToAttrs (
           builtins.map (p: {
@@ -100,52 +112,32 @@ pointyLib: rec {
             value = p.kind;
           }) params
         );
-        coreDefaults = builtins.listToAttrs (
-          builtins.map (p: {
-            name = p.param;
-            value = p.default;
-          }) (builtins.filter (p: p.default != null) params)
-        );
-        coreRequiredNames = builtins.map (p: p.param) (
-          builtins.filter (p: p.required && p.kind != "subjects") params
-        );
-        defaults = builderDefaults;
+        # Core defaults first, then host builder-argument defaults.
+        defaults =
+          builtins.listToAttrs (
+            builtins.map (p: {
+              name = p.param;
+              value = p.default;
+            }) (builtins.filter (p: p.default != null) params)
+          )
+          // builderDefaults;
         knownArgs = paramNames ++ (builtins.attrNames builderArgs) ++ specialArgs;
-        inherit requiredArgs;
+        requiredArgs =
+          builtins.map (p: p.param) (
+            builtins.filter (p: p.required && p.kind != "subjects") params
+          )
+          ++ builtins.filter (n: !(builderArgs.${n} ? default)) (builtins.attrNames builderArgs)
+          ++ specialArgs;
       }
     ) templates;
-
-  hostAdapter =
-    templates:
-    builtins.mapAttrs (
-      name: template:
-      let
-        contract = template.contract or (throw "pointy.template `${name}': contract missing");
-      in
-      {
-        interface = contract.interface or (throw "pointy.template `${name}': contract.interface missing");
-        bindings = template.bindings or { };
-        builderArgs = template.builderArgs or { };
-        sortKey = template.sortKey or null;
-        displayName = template.displayName or null;
-        description = template.description or null;
-        icon = template.icon or null;
-        pointyType = template.pointy.type;
-      }
-    ) templates;
-
-  renderStepConfig = stepConfigPure.renderStepConfig;
 
   # ---- Host schema derivation -----------------------------------------
 
   mkContractSchema =
-    { pkgs, pointy, entryTree, modules }:
-    let
-      modulesJson = builtins.toFile "pointy-modules.json" (builtins.toJSON modules);
-    in
+    { pkgs, pointy, entryTree, modulesFile }:
     pkgs.runCommand "pointy-contract-schema" {
       ENTRY_TREE = entryTree;
-      MODULES = modulesJson;
+      MODULES = modulesFile;
       nativeBuildInputs = [ pointy ];
       preferLocalBuild = true;
     } ''
@@ -158,13 +150,11 @@ pointyLib: rec {
       templates,
       pkgs,
       srcFiles,
-      contractSchema,
+      metas,
       ...
     }:
     let
       steps = evalSteps args;
-      coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
-      metas = templateMeta { inherit templates; schema = coreSchema; };
       compiledTemplates = builtins.mapAttrs (
         _: template:
         template.compile {
@@ -248,16 +238,13 @@ pointyLib: rec {
             (template.requirements or (_: defaultRequirements)) resolvedArgs;
         unknown = nixpkgs.lib.subtractLists meta.knownArgs (builtins.attrNames args);
         missing = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.requiredArgs;
-        missingCore = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.coreRequiredNames;
         normalizedArgs =
           if unknown != [ ] then
             throw "pointy.${type}: unknown arg(s): ${nixpkgs.lib.concatStringsSep ", " unknown}"
           else if missing != [ ] then
             throw "pointy.${type}: missing required arg(s): ${nixpkgs.lib.concatStringsSep ", " missing}"
-          else if missingCore != [ ] then
-            throw "pointy.${type}: missing required core param(s): ${nixpkgs.lib.concatStringsSep ", " missingCore}"
           else
-            meta.coreDefaults // meta.defaults // resolvedArgs // {
+            meta.defaults // resolvedArgs // {
               inherit id;
             };
         sourceOverride =
@@ -410,11 +397,8 @@ pointyLib: rec {
     ) projects;
 
   evalDependencies =
-    { stepDefs, templates, contractSchema, ... }:
+    { stepDefs, templates, metas, ... }:
     let
-      schema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
-      metas = templateMeta { inherit templates; schema = schema; };
-
       getDepIds =
         k: value:
         if k == "subject" || k == "listSubject" then
@@ -430,8 +414,7 @@ pointyLib: rec {
           stepDef = stepDefs.${id};
         in
         if
-          templates ? ${stepDef.type}
-          && metas ? ${stepDef.type}
+          metas ? ${stepDef.type}
           && templates.${stepDef.type}.pointy.type ? derivation
         then
           builtins.concatLists (

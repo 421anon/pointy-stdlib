@@ -1,23 +1,6 @@
-{
-}:
+# Renders the notebook's stepConfig document from the contract tables
+# (`templateMeta`) plus each template's presentation bindings.
 let
-  schemaVersion = 1;
-  schemaFormat = "pointy-argument-schema";
-
-  readSchema = schema:
-    let
-      format = schema.format or (throw "pointy core schema: missing `format`");
-      version = schema.version or (throw "pointy core schema: missing `version`");
-      _ =
-        if format != schemaFormat then
-          throw "pointy core schema: unsupported format `${format}` (expected `pointy-argument-schema`)"
-        else if version != schemaVersion then
-          throw "pointy core schema: unsupported version `${toString version}` (expected ${toString schemaVersion}); the host adapter must be upgraded"
-        else null;
-      forced = builtins.seq _ null;
-    in
-    builtins.seq forced schema.interfaces;
-
   normShape = s:
     if s != null && s ? kind && s.kind == "array" then
       s // { kind = "list"; }
@@ -171,20 +154,19 @@ let
       type = stepArgType path shape0 kind b;
     };
 
-  semanticArg = path: schemaParam: node:
+  semanticArg = path: param: node:
     let
-      rendered = argType path (schemaParam.shape or null) (schemaParam.kind or null) node;
+      rendered = argType path param.shape param.kind node;
       keepDefault =
-        schemaParam ? default
-        && schemaParam.default != null
+        param.default != null
         && (
           if rendered.type ? enum then
-            builtins.elem schemaParam.default rendered.type.enum
+            builtins.elem param.default rendered.type.enum
           else
             true
         );
     in
-    rendered // (if keepDefault then { inherit (schemaParam) default; } else { });
+    rendered // (if keepDefault then { inherit (param) default; } else { });
 
   builderArg = node:
     {
@@ -194,61 +176,52 @@ let
     };
 
   # ---- full merged stepConfig document --------------------------------
-  renderStepConfig = { schema, adapter }:
+  renderStepConfig = { templates, metas }:
     let
-      interfaces = readSchema schema;
-      templateNames = builtins.attrNames adapter;
+      templateNames = builtins.attrNames templates;
       document = builtins.mapAttrs (
         name: tpl:
         let
-          ifaceName = tpl.interface or (throw "pointy template `${name}': missing `interface`");
-          iface = interfaces.${ifaceName} or (throw "pointy template `${name}': interface `${ifaceName}' is not declared by the core schema");
-          schemaParams = iface.parameters or [ ];
+          meta = metas.${name};
           bindings = tpl.bindings or { };
           builderArgs = tpl.builderArgs or { };
-          schemaNames = builtins.map (sp: sp.parameter) schemaParams;
-          problems =
+          # Presentation-only check: a host may narrow a subject's
+          # template domain, never name a template that does not exist.
+          problems = builtins.concatLists (
             builtins.map
-              (n: "unknown binding `${n}' (not a core parameter of `${ifaceName}'; did you mean builderArgs?)")
-              (builtins.filter (n: !builtins.elem n schemaNames) (builtins.attrNames bindings))
-            ++ builtins.map
-              (n: "builder argument `${n}' collides with a core parameter of `${ifaceName}'")
-              (builtins.filter (n: builtins.elem n schemaNames) (builtins.attrNames builderArgs))
-            ++ builtins.concatLists (
-              builtins.map
-                (sp:
-                  if isSubjectKind (sp.kind or null) then
-                    builtins.map
-                      (t: "allowedTypes value `${t}' names no template")
-                      (builtins.filter
-                        (t: !builtins.elem t templateNames)
-                        ((bindings.${sp.parameter} or { }).allowedTypes or [ ]))
-                  else
-                    [ ])
-                schemaParams
-            );
+              (p:
+                if isSubjectKind p.kind then
+                  builtins.map
+                    (t: "allowedTypes value `${t}' names no template")
+                    (builtins.filter
+                      (t: !builtins.elem t templateNames)
+                      ((bindings.${p.param} or { }).allowedTypes or [ ]))
+                else
+                  [ ])
+              meta.params
+          );
           _ =
             if problems == [ ] then
               null
             else
               throw ("pointy template `${name}`: " + builtins.concatStringsSep "; " problems);
           args = builtins.seq _ (builtins.listToAttrs (
-            builtins.map (sp: {
-              name = sp.parameter;
-              value = semanticArg (ifaceName + "." + sp.parameter) sp (bindings.${sp.parameter} or { });
-            }) schemaParams
+            builtins.map (p: {
+              name = p.param;
+              value = semanticArg (meta.interface + "." + p.param) p (bindings.${p.param} or { });
+            }) meta.params
             ++ builtins.map (n: {
               name = n;
               value = builderArg builderArgs.${n};
             }) (builtins.attrNames builderArgs)
           ));
           type =
-            if tpl ? pointyType && tpl.pointyType ? derivation then
+            if tpl.pointy.type ? derivation then
               {
-                derivation = tpl.pointyType.derivation // { inherit args; };
+                derivation = tpl.pointy.type.derivation // { inherit args; };
               }
             else
-              tpl.pointyType;
+              tpl.pointy.type;
         in
         {
           sortKey = tpl.sortKey or null;
@@ -257,15 +230,10 @@ let
           icon = tpl.icon or null;
           inherit type;
         }
-      ) adapter;
+      ) templates;
     in
     builtins.deepSeq document document;
 in
 {
-  inherit
-    schemaVersion
-    schemaFormat
-    readSchema
-    renderStepConfig
-    ;
+  inherit renderStepConfig;
 }
