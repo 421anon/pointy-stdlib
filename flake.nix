@@ -78,8 +78,8 @@
                 dependencies = evalDependencies (cfg // {
                   contractSchema = cfg.semantic.result.contractSchema;
                 });
-                # The semantic kernel: handles + presenter metadata +
-                # transport documents + derivation views.  Merged here so
+                # The semantic kernel: presenter metadata + transport
+                # documents + derivation views.  Merged here so
                 # flake.pointy keeps a single definer.
               }
               // cfg.semantic.result;

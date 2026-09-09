@@ -305,7 +305,7 @@ in
       # Computed kernel, merged into flake.pointy by the default module
       # (flake outputs accept one definer per attribute).
       pointy.semantic.result = {
-        inherit handles unresolvable transport;
+        inherit unresolvable transport;
         inherit checked certificates adapter;
         inherit contractSchema;
         contractModel = sharedModel;
