@@ -75,7 +75,9 @@
                 projects = evalProjects cfg;
                 stepDefs = evalStepDefs cfg;
                 srcFiles = cfg.srcFiles;
-                dependencies = evalDependencies cfg;
+                dependencies = evalDependencies (cfg // {
+                  contractSchema = cfg.semantic.result.contractSchema;
+                });
                 # The semantic kernel: handles + presenter metadata +
                 # transport documents + derivation views.  Merged here so
                 # flake.pointy keeps a single definer.

@@ -9,13 +9,15 @@ Nix flake library that turns a user repository into the flake outputs that [Poin
 - `#pointy.stepDefs` — step instance definitions
 - `#pointy.projects` — project membership and ordering
 - `#pointy.srcFiles` — per-step source files
-- `#pointy.dependencies` — step dependency graph, derived from the declared contract kinds
+- `#pointy.dependencies` — step dependency graph, derived from the core schema's parameter kinds
 - per-system `#pointy.steps.<id>` and `#pointy.projectOutPaths` — buildable derivations
 
 The core authority carries into record keying: step records and every
 adapter-side argument map (`knownArgs`, resolution, dependencies,
 semantic handles/conformance, and the template `compile` args) are keyed
-by the contract's `param`. `contract.parameters` entries carry `param`
-(and optional `kind`).
+by the core schema's `parameter` name.  Templates declare only
+`contract.interface` and `contract.output`; parameter names, order,
+kinds, shapes, defaults, and requiredness come from
+`#pointy.contractSchema`.
 
 See [Setting Up the User Repository](https://github.com/421anon/pointy/blob/main/docs/pages/user-repo-setup.md) for a minimal `flake.nix` and template examples.

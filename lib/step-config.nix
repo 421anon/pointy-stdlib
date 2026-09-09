@@ -52,8 +52,6 @@ let
   scalarIsString = s: s == "text";
   scalarIsInt = s: s == "integer";
 
-  __unique = xs: builtins.foldl' (acc: x: if builtins.elem x acc then acc else acc ++ [ x ]) [ ] xs;
-
   isSubjectKind = kind:
     kind == "subject" || kind == "subjects" || kind == "listSubject";
 
@@ -274,10 +272,12 @@ let
 
   # ---- full merged stepConfig document --------------------------------
   #
-  # adapter: { <name> = { interface; parameters; bindings; builderArgs;
-  #                        sortKey; displayName; description; icon;
+  # adapter: { <name> = { interface; bindings; builderArgs; sortKey;
+  #                        displayName; description; icon;
   #                        pointyType }; ... }
-  #   parameters = [ { param; kind ?; } ... ]
+  # The parameter table (names, order, kinds, shapes, defaults,
+  # requiredness) comes from the core schema; the adapter carries only
+  # host presentation overrides and adapter-owned builder inputs.
   renderStepConfig = { schema, adapter }:
     let
       interfaces = readSchema schema;
@@ -288,10 +288,8 @@ let
         ifaceName = tpl.interface or (throw "pointy template `${name}': missing `interface`");
         iface = interfaces.${ifaceName} or (throw "pointy template `${name}': interface `${ifaceName}' is not declared by the core schema");
         schemaParams = iface.parameters or [ ];
-        params = tpl.parameters or [ ];
         bindings = tpl.bindings or { };
         builderArgs = tpl.builderArgs or { };
-        _covered = checkParamCoverage name ifaceName schemaParams params;
         validatedOverlays = builtins.foldl' (
           acc: sp:
           (validateOverlay
@@ -302,8 +300,7 @@ let
             == null)
           && acc
         ) true schemaParams;
-        _validate = builtins.seq _covered validatedOverlays;
-        args = builtins.seq _validate (builtins.listToAttrs (
+        args = builtins.seq validatedOverlays (builtins.listToAttrs (
           builtins.map (sp: {
             name = sp.parameter;
             value = semanticArg sp (bindings.${sp.parameter} or { });
@@ -330,27 +327,6 @@ let
       }
     ) adapter;
 
-  checkParamCoverage = name: ifaceName: schemaParams: params:
-    let
-      schemaNames = builtins.map (sp: sp.parameter) schemaParams;
-      paramNames = builtins.map (p: p.param) params;
-      missing = builtins.filter (p: !builtins.elem p paramNames) schemaNames;
-      extra = builtins.filter (p: !builtins.elem p schemaNames) paramNames;
-      dup = builtins.filter (
-        n: builtins.length (builtins.filter (x: x == n) paramNames) > 1
-      ) (__unique paramNames);
-      problems =
-        (if missing == [ ] && extra == [ ] then
-          [ ]
-        else
-          [ "contract parameters for interface `${ifaceName}' disagree with the core (missing: ${builtins.concatStringsSep ", " missing}; extra: ${builtins.concatStringsSep ", " extra})" ])
-        ++ (if dup == [ ] then
-          [ ]
-        else
-          [ "duplicate contract parameters `${builtins.concatStringsSep ", " dup}'" ]);
-    in
-    if problems == [ ] then null else throw "pointy template `${name}': ${builtins.concatStringsSep "; " problems}";
-
   # ---- host conformance ----------------------------------------------
 
   # Adapter table vs core schema, minus the vacuity probes.  Returns the
@@ -367,7 +343,6 @@ let
               iface = interfaces.${ifaceName} or null;
               schemaParams = if iface != null then iface.parameters or [ ] else [ ];
               schemaNames = builtins.map (sp: sp.parameter) schemaParams;
-              paramNames = builtins.map (p: p.param) (tpl.parameters or [ ]);
               bindings = tpl.bindings or { };
               builderArgNames = builtins.attrNames (tpl.builderArgs or { });
             in
@@ -377,17 +352,6 @@ let
               [ "${name}: interface `${ifaceName}` is not declared by the core schema" ]
             else
               [ ])
-            ++ (let unknown = builtins.filter (p: !builtins.elem p schemaNames) paramNames;
-              in
-              builtins.map (p: "${name}: contract parameter `${p}` is not a core parameter of `${ifaceName}`") unknown)
-            ++ (let missing = builtins.filter (p: !builtins.elem p paramNames) schemaNames;
-              in
-              builtins.map (p: "${name}: core parameter `${p}` has no adapter entry") missing)
-            ++ (let dup = builtins.filter (
-              n: builtins.length (builtins.filter (x: x == n) paramNames) > 1
-            ) (__unique paramNames);
-              in
-              builtins.map (n: "${name}: duplicate contract parameter `${n}`") dup)
             ++ (let unknown = builtins.filter (p: !builtins.elem p schemaNames) (builtins.attrNames bindings);
               in
               builtins.map (p: "${name}: unknown binding `${p}` (not a core parameter)") unknown)
@@ -395,40 +359,11 @@ let
               in
               builtins.map (p: "${name}: builder argument `${p}` collides with a core parameter") coll)
             ++ (builtins.concatLists (
-              builtins.map (p: if iface != null then kindAgreement name schemaParams p else [ ]) (tpl.parameters or [ ])
-            ))
-            ++ (builtins.concatLists (
-              builtins.map (p: if iface != null then defaultAgreement name schemaParams p else [ ]) (tpl.parameters or [ ])
-            ))
-            ++ (builtins.concatLists (
               builtins.map (sp: allowedTypesAgreement name sp bindings templateNames) schemaParams
             ))
           ) adapter
         )
       );
-      kindAgreement = name: schemaParams: p:
-        let
-          sp = builtins.head (builtins.filter (x: x.parameter == p.param) schemaParams);
-          coreKind = sp.kind or null;
-        in
-        if p ? kind && coreKind != null && p.kind != coreKind then
-          [ "${name}: authored kind `${p.kind}` for `${p.param}` disagrees with the core kind `${coreKind}`" ]
-        else if p ? kind && coreKind == null then
-          [ "${name}: authored kind `${p.kind}` for `${p.param}` but the core declares no kind" ]
-        else
-          [ ];
-      defaultAgreement = name: schemaParams: p:
-        if p ? default && p.default != null then
-          let
-            sp = builtins.head (builtins.filter (x: x.parameter == p.param) schemaParams);
-            coreDefault = sp.default or null;
-          in
-          if coreDefault != null && p.default != coreDefault then
-            [ "${name}: construction default `${builtins.toJSON p.default}` for `${p.param}` disagrees with the core default `${builtins.toJSON coreDefault}`" ]
-          else
-            [ ]
-        else
-          [ ];
       allowedTypesAgreement = name: sp: bindings: tplNames:
         if isSubjectKind (sp.kind or null) then
           let
@@ -466,14 +401,11 @@ let
     else
       let
         ifaceName = builtins.head ifaceNames;
-        schemaParams = interfaces.${ifaceName}.parameters or [ ];
-        paramNames = builtins.map (sp: sp.parameter) schemaParams;
         badUnknownBinding = problemsCore {
           inherit schema;
           adapter = {
             __probe = {
               interface = ifaceName;
-              parameters = builtins.map (p: { param = p; }) paramNames;
               bindings = { doesNotExist = { description = ""; }; };
               pointyType = { derivation = { withSrcFiles = false; }; };
               builderArgs = { };
@@ -481,26 +413,9 @@ let
           };
           inherit templateNames;
         };
-        badKind = problemsCore {
-          inherit schema;
-          adapter = {
-            __probe = {
-              interface = ifaceName;
-              parameters = builtins.map (p: { param = p; kind = "subjects"; }) paramNames;
-              bindings = { };
-              builderArgs = { };
-              pointyType = { derivation = { withSrcFiles = false; }; };
-            };
-          };
-          inherit templateNames;
-        };
       in
       (if builtins.length badUnknownBinding == 0 then
         [ "probe `unknown-binding`: not rejected (gate is vacuous)" ]
-      else
-        [ ])
-      ++ (if builtins.length badKind == 0 then
-        [ "probe `kind-disagreement`: not rejected (gate is vacuous)" ]
       else
         [ ]);
 

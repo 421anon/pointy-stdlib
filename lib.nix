@@ -27,34 +27,24 @@ pointyLib: rec {
   # ---- Contract / construction tables --------------------------------
   #
   # Each template authors one plain-data table:
-  #   contract = {
-  #     interface = "..."; output = "...";
-  #     parameters = [ { param = "...";
-  #                      kind ? "value";        # adapter construction
-  #                      default ? …; } ... ];  # optional; must match core
-  #   };
+  #   contract = { interface = "..."; output = "..."; };
   # Records, adapter argument maps, and compile args use `param`.
   #   bindings.<param> = { … };   # OPTIONAL presentation override
   #   builderArgs.<name> = { description; displayName ? null; default ? …;
   #     type = <explicit descriptor>; };   # adapter-owned editable inputs
   #
   # Semantic authority is the CORE argument schema (a derivation a host
-  # realizes to register at eval, IFD per user policy; shape, finite
-  # domain, default, and requiredness come from it): what the RAW
-  # pipeline needs at evaluation time lives here as construction
-  # metadata, not as copies in `bindings`:
-  #   - `kind` (value/subject/subjects/listSubject) drives raw reference
-  #     resolution, dependency discovery, and handle re-wrapping.  The
-  #     host conformance check asserts it agrees with the core.
-  #   - an authored `default` appears where the core declares one and
-  #     agrees with it; otherwise the schema supplies the effective value.
+  # realizes to register at eval, IFD per user policy): parameter names,
+  # order, kind, shape, finite domain, default, and requiredness all come
+  # from it.  `kind` (value/subject/subjects/listSubject) drives raw
+  # reference resolution, dependency discovery, and handle re-wrapping.
+  # Nothing semantic is copied into the template table.
   # `bindings` provides presentation overrides (host-time, build input):
-  # widgets, dropdowns, reference types, labels, autocomplete.  Shape,
-  # domain, default, and requiredness come from the core; unknown
+  # widgets, dropdowns, reference types, labels, autocomplete.  Unknown
   # override names reject.
   #
   # Returns per template:
-  #   params        : [ { param, kind } ] in contract order
+  #   params        : [ { param, kind } ] in schema order
   #   paramKinds    : param name -> kind                       (resolution;
   #                   records are keyed by param)
   #   defaults      : authored defaults for builder args
@@ -62,19 +52,17 @@ pointyLib: rec {
   #   knownArgs     : every param name a record may carry (incl. the
   #                   upload/download transport names)
   templateMeta =
-    templates:
+    { templates, schema }:
+    let
+      interfaces = schema.interfaces or (throw "pointy.templateMeta: schema has no `interfaces` table");
+    in
     builtins.mapAttrs (
       name: template:
       let
-        validKinds = [
-          "value"
-          "subject"
-          "subjects"
-          "listSubject"
-        ];
         contract = template.contract or (throw "pointy.template `${name}': contract missing");
         interface = contract.interface or (throw "pointy.template `${name}': contract.interface missing");
-        pairs = contract.parameters or (throw "pointy.template `${name}': contract.parameters missing");
+        iface = interfaces.${interface} or (throw "pointy.template `${name}': interface `${interface}' is not declared by the core schema");
+        schemaParams = iface.parameters or [ ];
         bindings = template.bindings or { };
         builderArgs = template.builderArgs or { };
         kind = template.pointy.type;
@@ -87,36 +75,19 @@ pointyLib: rec {
             [ ];
 
         params = builtins.map (
-          pair:
-          let
-            param = pair.param or (throw "pointy.template `${name}': contract.parameters entry is missing `param`");
-            pkind = pair.kind or "value";
-            _entryShape =
-              if pair ? option then
-                throw "pointy.template `${name}.${param}': contract.parameters entry shape is { param; kind ? }"
-              else
-                null;
-            _kindValid =
-              if builtins.elem pkind validKinds then
-                null
-              else
-                throw "pointy.template `${name}.${param}': unknown kind `${pkind}' (expected one of ${nixpkgs.lib.concatStringsSep ", " validKinds})";
-          in
+          sp:
           {
-            inherit param;
-            kind = pkind;
+            param = sp.parameter or (throw "pointy core schema: interface `${interface}' has a parameter without a name");
+            kind = sp.kind or (throw "pointy core schema: parameter `${sp.parameter or "?"}' of `${interface}' has no kind");
           }
-        ) pairs;
+        ) schemaParams;
         paramNames = builtins.map (p: p.param) params;
         problems =
           builtins.map
-            (n: "duplicate contract parameter `${n}`")
-            (builtins.filter (n: builtins.length (builtins.filter (x: x == n) paramNames) > 1) (nixpkgs.lib.unique paramNames))
-          ++ builtins.map
-            (n: "unknown binding `${n}': not a contract parameter (did you mean builderArgs?)")
+            (n: "unknown binding `${n}': not a core parameter of `${interface}' (did you mean builderArgs?)")
             (builtins.filter (n: !builtins.elem n paramNames) (builtins.attrNames bindings))
           ++ builtins.map
-            (n: "builder argument `${n}' collides with a contract parameter")
+            (n: "builder argument `${n}' collides with a core parameter of `${interface}'")
             (builtins.filter (n: builtins.elem n paramNames) (builtins.attrNames builderArgs));
         _validated =
           if problems == [ ] then
@@ -124,7 +95,6 @@ pointyLib: rec {
           else
             throw ("pointy.template `${name}': " + nixpkgs.lib.concatStringsSep "; " problems);
 
-        semanticDefaults = { };
         builderDefaults = builtins.listToAttrs (
           builtins.map (n: {
             name = n;
@@ -143,7 +113,7 @@ pointyLib: rec {
           builtins.filter (n: !(builderArgs.${n} ? default)) (builtins.attrNames builderArgs)
           ++ specialArgs;
       in
-      {
+      builtins.seq _validated {
         inherit params builderArgs;
         paramKinds = builtins.listToAttrs (
           builtins.map (p: {
@@ -159,35 +129,18 @@ pointyLib: rec {
 
   # Serialize the host's template tables into the plain-data `adapter`
   # document the stepConfig merge and the conformance check consume as a
-  # build input.  `parameters` carries the construction metadata, the
-  # raw `bindings` (presentation overrides) pass through to be validated
-  # and merged against the core schema.
+  # build input: identity plus the raw `bindings` (presentation
+  # overrides) and `builderArgs`.  Semantic parameters come from the
+  # core schema, never from here.
   hostAdapter =
     templates:
     builtins.mapAttrs (
       name: template:
       let
         contract = template.contract or (throw "pointy.template `${name}': contract missing");
-        parameters = builtins.map (
-          pair:
-          let
-            param = pair.param or (throw "pointy.template `${name}': contract.parameters entry is missing `param`");
-            _entryShape =
-              if pair ? option then
-                throw "pointy.template `${name}.${param}': contract.parameters entry shape is { param; kind ? }"
-              else
-                null;
-          in
-          {
-            inherit param;
-            kind = pair.kind or "value";
-            default = pair.default or null;
-          }
-        ) (contract.parameters or [ ]);
       in
       {
         interface = contract.interface;
-        inherit parameters;
         bindings = template.bindings or { };
         builderArgs = template.builderArgs or { };
         sortKey = template.sortKey or null;
@@ -293,12 +246,17 @@ pointyLib: rec {
       templates,
       pkgs,
       srcFiles,
-      contractSchema ? null,
+      contractSchema,
       ...
     }:
     let
       steps = evalSteps args;
-      metas = templateMeta templates;
+      # The core argument schema, realized and read at EVAL (IFD,
+      # user-approved): the parameter table (names, order, kinds),
+      # defaults, and requiredness all come from it.  Realized once;
+      # every step reads the same value.
+      coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
+      metas = templateMeta { inherit templates; schema = coreSchema; };
       compiledTemplates = builtins.mapAttrs (
         _: template:
         template.compile {
@@ -312,14 +270,6 @@ pointyLib: rec {
         ior = "0";
         iow = "0";
       };
-      # The core argument schema, realized and read at EVAL (IFD,
-      # user-approved): semantic defaults and requiredness come from it.
-      # Realized once; every step reads the same value.
-      coreSchema =
-        if contractSchema != null then
-          builtins.fromJSON (builtins.readFile (builtins.toString contractSchema))
-        else
-          null;
     in
     stepDefs
     |> builtins.mapAttrs (
@@ -404,7 +354,7 @@ pointyLib: rec {
         missing = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.requiredArgs;
         # The core schema realized + read at EVAL (IFD, user-approved):
         # canonical defaults and requiredness.
-        iface = (coreSchema.interfaces or { }).${template.contract.interface} or null;
+        iface = coreSchema.interfaces.${template.contract.interface} or (throw "pointy.${type}: interface `${template.contract.interface}' is not declared by the core schema");
         coreDefaults =
           builtins.listToAttrs (
             builtins.map (
@@ -413,7 +363,7 @@ pointyLib: rec {
                 name = sp.parameter;
                 value = sp.default;
               }
-            ) (builtins.filter (sp: sp.default != null) (if iface != null then iface.parameters or [ ] else [ ]))
+            ) (builtins.filter (sp: sp.default != null) iface.parameters)
           );
         coreRequiredNames =
           builtins.map (
@@ -422,7 +372,7 @@ pointyLib: rec {
             sp:
             (sp.required or true)
             && (sp.kind or "value") != "subjects"
-          ) (if iface != null then iface.parameters or [ ] else [ ]));
+          ) iface.parameters);
         missingCore = nixpkgs.lib.subtractLists (builtins.attrNames args) coreRequiredNames;
         normalizedArgs =
           if unknown != [ ] then
@@ -587,9 +537,10 @@ pointyLib: rec {
     ) projects;
 
   evalDependencies =
-    { stepDefs, templates, ... }:
+    { stepDefs, templates, contractSchema, ... }:
     let
-      metas = templateMeta templates;
+      schema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
+      metas = templateMeta { inherit templates; schema = schema; };
 
       getDepIds =
         k: value:

@@ -18,15 +18,12 @@
 #   contract = {
 #     interface = "...";                # the struct applied per record
 #     output = "...";                   # the exact named output certified
-#     parameters = [                    # projection, in order
-#       { param = "..."; kind ? "value"; } ...
-#     ];
 #   };
-#   bindings.<param> = { ... }          # presentation/default overlay
+#   bindings.<param> = { ... }          # presentation overlay
 #   builderArgs.<name> = { ... }        # adapter-owned editable inputs
-# The template table and its kinds/defaults form the adapter's side of
-# the host merge; the conformance check compares them against the core's
-# interface descriptions and declared defaults (as build-time inputs).
+# The core argument schema is the only parameter authority (names, order,
+# kinds, shapes, defaults, requiredness); the conformance check validates
+# the host's presentation overrides against it as build-time inputs.
 #
 # The kernel is computed at flake level (pkgs comes from the host option);
 # derivation views land in packages.pointy, typed `package`.
@@ -96,26 +93,34 @@ in
 
       resolvedScanners = builtins.mapAttrs resolveBundle sel.scanners;
 
-      # Structural projection composed from a template's declared
-      # contract.parameters over the canonical call args: each projected
-      # argument is read from args.<param> (records and call args are
-      # param-keyed).  The list is the projection order.
-      projectionOf = contract: args:
-        builtins.listToAttrs (builtins.map (pair: {
-          name = pair.param;
-          value = args.${pair.param};
-        }) contract.parameters);
+      # Structural projection over the core schema's parameter table: each
+      # projected argument is read from args.<param> (records and call args
+      # are param-keyed).  Attrsets are name-keyed, so the schema order is
+      # not load-bearing for serialization; it is the one canonical order.
+      projectionOf = params: args:
+        builtins.listToAttrs (builtins.map (p: {
+          name = p.param;
+          value = args.${p.param};
+        }) params);
 
       templates = top.config.pointy.templates;
       records = top.config.pointy.stepDefs;
-      # One authored table per template (parameters, kinds, defaults,
-      # builder args), validated at the first consumer.
-      metas = pointyLib.templateMeta templates;
+      # The core argument schema (IFD, user-approved): the one authority
+      # for parameter names, order, kinds, shapes, defaults, and
+      # requiredness.  `metas` and `evalSteps` read the same document.
+      contractSchema = pointyLib.mkContractSchema {
+        inherit pkgs;
+        pointy = sel.language.packages.${system}.pointy;
+        entryTree = entryTree;
+        modules = sel.modules;
+      };
+      coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
+      metas = pointyLib.templateMeta { inherit templates; schema = coreSchema; };
 
       # Same evaluation the default module publishes as packages.pointy.steps
       # (identical derivations — same function, args, pkgs), computed here
       # because the kernel needs it at flake level.
-      steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs; });
+      steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs contractSchema; });
 
       # ---- Semantic sources --------------------------------------------
       #
@@ -218,10 +223,23 @@ in
               else
                 value
             ) rawStep.meta.pointy.args;
+            contract = templates.${rec_.type}.contract;
+            iface = coreSchema.interfaces.${contract.interface} or (throw "pointy.semantic: interface `${contract.interface}' is not declared by the core schema");
+            # Core-declared value defaults, under the record's resolved
+            # values: the projection reads every schema parameter out of
+            # callArgs, and the checker sees the same effective set.
+            coreDefaults = builtins.listToAttrs (
+              builtins.map
+                (sp: {
+                  name = sp.parameter;
+                  value = sp.default;
+                })
+                (builtins.filter (sp: sp.default != null) (iface.parameters or [ ]))
+            );
             # Effective call arguments, canonical and param-keyed:
-            # authored defaults under the record's resolved values
-            # (record wins; resolvedHandles already carries the raw step's
-            # param-keyed canonical args), plus the record id.  The
+            # core and authored defaults under the record's resolved
+            # values (record wins; resolvedHandles already carries the raw
+            # step's param-keyed canonical args), plus the record id.  The
             # projection reads contract parameters out of this same
             # union, so semantics and the raw builder consume identical
             # effective arguments.  A defaulted empty reference list
@@ -237,15 +255,14 @@ in
                 { subjects = [ ]; }
               else
                 value
-            ) (meta.defaults // resolvedHandles // { inherit id; });
-            contract = templates.${rec_.type}.contract;
+            ) (coreDefaults // meta.defaults // resolvedHandles // { inherit id; });
           in
           (langLib.mkSidecar {
             source = entrySource;
             modules = entryModules;
             interface = contract.interface;
             output = contract.output;
-            arguments = projectionOf contract;
+            arguments = projectionOf meta.params;
             construct = _args: rawStep;
             scanners = scannerBundles;
             key = id;
@@ -275,28 +292,10 @@ in
 
       # ---- Presenter metadata --------------------------------------------
       #
-      # Per-template parameter specs from the declared
-      # contract.parameters partition plus the binding table.  The table
-      # is the host side of the merge the conformance check validates
-      # against the core; evaluation never reads MODEL bytes.
-      # ---- Host documents (build inputs) -------------------------------
-      #
-      # The host's core argument schema: generated by the core over the
-      # host's OWN enrolled sources (`pointy check --schema`), a
-      # derivation output.  The stepConfig derivation (default module)
-      # and the host conformance check consume it, and evaluation reads
-      # it through the user-authorized IFD for construction defaults.
-      # `adapter` is the host's plain-data presentation
-      # table (contract metadata + optional bindings + builderArgs) the
-      # merge validates against the schema with unknown override names
-      # rejected.
-      contractSchema = pointyLib.mkContractSchema {
-        inherit pkgs;
-        pointy = sel.language.packages.${system}.pointy;
-        entryTree = entryTree;
-        modules = sel.modules;
-      };
-
+      # `adapter` is the host's plain-data presentation table (identity +
+      # optional bindings + builderArgs); the merge validates it against
+      # the core schema with unknown override names rejected.  Semantic
+      # parameter metadata comes from the schema, never from here.
       adapter = pointyLib.hostAdapter templates;
 
       checked = resolvableMap (h: h.target);
