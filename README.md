@@ -16,7 +16,8 @@ The core authority carries into record keying: step records and every
 adapter-side argument map (`knownArgs`, resolution, dependencies,
 semantic handles/conformance, and the template `compile` args) are keyed
 by the core schema's `parameter` name.  Templates declare only
-`contract.interface` and `contract.output`; parameter names, order,
+`contract.interface` (and optionally `contract.output`, which defaults
+to `"out"`); parameter names, order,
 kinds, shapes, defaults, and requiredness come from
 `#pointy.contractSchema`.
 

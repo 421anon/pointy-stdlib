@@ -27,7 +27,7 @@ pointyLib: rec {
   # ---- Contract / construction tables --------------------------------
   #
   # Each template authors one plain-data table:
-  #   contract = { interface = "..."; output = "..."; };
+  #   contract = { interface = "..."; output ? "out"; };
   # Records, adapter argument maps, and compile args use `param`.
   #   bindings.<param> = { … };   # OPTIONAL presentation override
   #   builderArgs.<name> = { description; displayName ? null; default ? …;
@@ -45,6 +45,7 @@ pointyLib: rec {
   #
   # Returns per template:
   #   params        : [ { param, kind } ] in schema order
+  #   output        : the certified named output (default "out")
   #   paramKinds    : param name -> kind                       (resolution;
   #                   records are keyed by param)
   #   defaults      : authored defaults for builder args
@@ -115,6 +116,7 @@ pointyLib: rec {
       in
       builtins.seq _validated {
         inherit params builderArgs;
+        output = contract.output or "out";
         paramKinds = builtins.listToAttrs (
           builtins.map (p: {
             name = p.param;

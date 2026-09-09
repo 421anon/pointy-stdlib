@@ -17,7 +17,7 @@
 # Templates carry the contract convention:
 #   contract = {
 #     interface = "...";                # the struct applied per record
-#     output = "...";                   # the exact named output certified
+#     output = "...";                   # OPTIONAL; defaults to "out"
 #   };
 #   bindings.<param> = { ... }          # presentation overlay
 #   builderArgs.<name> = { ... }        # adapter-owned editable inputs
@@ -261,7 +261,7 @@ in
             source = entrySource;
             modules = entryModules;
             interface = contract.interface;
-            output = contract.output;
+            output = meta.output;
             arguments = projectionOf meta.params;
             construct = _args: rawStep;
             scanners = scannerBundles;
