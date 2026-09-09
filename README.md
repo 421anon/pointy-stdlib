@@ -4,7 +4,7 @@ Nix flake library that turns a user repository into the flake outputs that [Poin
 
 `pointy-stdlib.lib.mkFlake` wires together step templates, step instances, projects, and source files under `./templates`, `./steps`, `./projects`, and `./srcFiles`, and exposes them as:
 
-- `#pointy.stepConfig` — host-generated per-template UI descriptors: a realized derivation merging the CORE argument schema (built by `pointy check --schema` over the host's own sources) with the host's optional presentation overrides (`bindings`). The core is the source of shape, finite domain, default, and requiredness; `bindings` contribute presentation (widgets, dropdowns, reference types, labels); unknown override names reject. The backend serves the realized JSON.
+- `#pointy.stepConfig` — host-generated per-template UI descriptors: a realized derivation merging the CORE argument schema (built by `pointy check --schema` over the host's own sources) with the host's optional presentation overrides (`bindings`). The core is the source of shape, finite domain, default, and requiredness; `bindings` contribute presentation (widgets, dropdowns, reference types, labels). The build fails on a binding that names no core parameter, a builder argument that collides with one, an `allowedTypes` value that names no template, or a presentation override the core shape rejects. The backend serves the realized JSON.
 - `#pointy.contractSchema` — the host's core argument schema derivation (a build input; realized at eval by user-authorized IFD).
 - `#pointy.stepDefs` — step instance definitions
 - `#pointy.projects` — project membership and ordering

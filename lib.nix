@@ -187,8 +187,9 @@ pointyLib: rec {
 
   # The host-generated stepConfig document: the core schema merged with
   # the host's presentation overrides (bindings), rendered by the pure
-  # merge module and emitted as a derivation.  The backend serves the
-  # realized file.
+  # merge module and emitted as a derivation.  The build fails when the
+  # adapter tables break the schema's structural rules or an overlay;
+  # the backend serves the realized file.
   mkStepConfig =
     { pkgs, schema, templates }:
     let

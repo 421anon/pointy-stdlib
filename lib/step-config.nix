@@ -329,65 +329,77 @@ let
 
   # ---- host conformance ----------------------------------------------
 
-  # Adapter table vs core schema, minus the vacuity probes.  Returns the
-  # flat list of problems the gate must require empty.
-  problemsCore = { schema, adapter, templateNames }:
+  # Adapter-vs-schema problems the renderer cannot see on its own:
+  # unknown binding names, builder arguments colliding with core
+  # parameters, allowedTypes values naming no template, and interface
+  # identity.  Presentation overlays that break the schema are rejected
+  # by renderStepConfig itself, with its own precise message.
+  structuralProblems = { schema, adapter, templateNames }:
     let
       interfaces = readSchema schema;
-      structural = builtins.concatLists (
-        builtins.attrValues (
-          builtins.mapAttrs (
-            name: tpl:
-            let
-              ifaceName = tpl.interface or "";
-              iface = interfaces.${ifaceName} or null;
-              schemaParams = if iface != null then iface.parameters or [ ] else [ ];
-              schemaNames = builtins.map (sp: sp.parameter) schemaParams;
-              bindings = tpl.bindings or { };
-              builderArgNames = builtins.attrNames (tpl.builderArgs or { });
-            in
-            (if ifaceName == "" then
-              [ "${name}: missing `interface`" ]
-            else if iface == null then
-              [ "${name}: interface `${ifaceName}` is not declared by the core schema" ]
-            else
-              [ ])
-            ++ (let unknown = builtins.filter (p: !builtins.elem p schemaNames) (builtins.attrNames bindings);
-              in
-              builtins.map (p: "${name}: unknown binding `${p}` (not a core parameter)") unknown)
-            ++ (let coll = builtins.filter (p: builtins.elem p schemaNames) builderArgNames;
-              in
-              builtins.map (p: "${name}: builder argument `${p}` collides with a core parameter") coll)
-            ++ (builtins.concatLists (
-              builtins.map (sp: allowedTypesAgreement name sp bindings templateNames) schemaParams
-            ))
-          ) adapter
-        )
-      );
-      allowedTypesAgreement = name: sp: bindings: tplNames:
-        if isSubjectKind (sp.kind or null) then
-          let
-            allowed = (bindings.${sp.parameter} or { }).allowedTypes or [ ];
-            unknown = builtins.filter (t: !builtins.elem t tplNames) allowed;
-          in
-          builtins.map (t: "${name}: allowedTypes value `${t}` names no template") unknown
-        else
-          [ ];
-      mergeProblems = builtins.concatLists (
-        builtins.attrValues (
-          # toJSON deep-forces each template document so overlay/shape
-          # violations surface here (a lazy WHNF tryEval would miss them).
-          builtins.mapAttrs (
-            name: _:
-            let
-              r = builtins.tryEval (builtins.toJSON ((renderStepConfig { inherit schema adapter; }).${name}));
-            in
-            if r.success then [ ] else [ "${name}: merge rejected over the core schema (validation error; see the stepConfig build for detail)" ]
-          ) adapter
-        )
-      );
     in
-    structural ++ mergeProblems;
+    builtins.concatLists (
+      builtins.attrValues (
+        builtins.mapAttrs (
+          name: tpl:
+          let
+            ifaceName = tpl.interface or "";
+            iface = interfaces.${ifaceName} or null;
+            schemaParams = if iface != null then iface.parameters or [ ] else [ ];
+            schemaNames = builtins.map (sp: sp.parameter) schemaParams;
+            bindings = tpl.bindings or { };
+            builderArgNames = builtins.attrNames (tpl.builderArgs or { });
+          in
+          (if ifaceName == "" then
+            [ "${name}: missing `interface`" ]
+          else if iface == null then
+            [ "${name}: interface `${ifaceName}` is not declared by the core schema" ]
+          else
+            [ ])
+          ++ (let unknown = builtins.filter (p: !builtins.elem p schemaNames) (builtins.attrNames bindings);
+            in
+            builtins.map (p: "${name}: unknown binding `${p}` (not a core parameter)") unknown)
+          ++ (let coll = builtins.filter (p: builtins.elem p schemaNames) builderArgNames;
+            in
+            builtins.map (p: "${name}: builder argument `${p}` collides with a core parameter") coll)
+          ++ (builtins.concatLists (
+            builtins.map (sp: allowedTypesAgreement name sp bindings templateNames) schemaParams
+          ))
+        ) adapter
+      )
+    );
+
+  allowedTypesAgreement = name: sp: bindings: tplNames:
+    if isSubjectKind (sp.kind or null) then
+      let
+        allowed = (bindings.${sp.parameter} or { }).allowedTypes or [ ];
+        unknown = builtins.filter (t: !builtins.elem t tplNames) allowed;
+      in
+      builtins.map (t: "${name}: allowedTypes value `${t}` names no template") unknown
+    else
+      [ ];
+
+  # Templates whose merge over the core schema is rejected (overlay or
+  # shape violation).  The message is generic because tryEval cannot
+  # carry the renderer's own text.
+  mergeProblems = { schema, adapter }:
+    builtins.concatLists (
+      builtins.attrValues (
+        # toJSON deep-forces each template document so overlay/shape
+        # violations surface here (a lazy WHNF tryEval would miss them).
+        builtins.mapAttrs (
+          name: _:
+          let
+            r = builtins.tryEval (builtins.toJSON ((renderStepConfig { inherit schema adapter; }).${name}));
+          in
+          if r.success then [ ] else [ "${name}: merge rejected over the core schema (validation error; see the stepConfig build for detail)" ]
+        ) adapter
+      )
+    );
+
+  problemsCore = { schema, adapter, templateNames }:
+    structuralProblems { inherit schema adapter templateNames; }
+    ++ mergeProblems { inherit schema adapter; };
 
   # The gate must not be vacuous: adapters that provably break a rule
   # have to surface a problem.  Computed against the live schema so the
@@ -419,6 +431,19 @@ let
       else
         [ ]);
 
+  # The structural half of the conformance surface: what the stepConfig
+  # build enforces before rendering.  renderStepConfig covers the overlay
+  # half with its own precise errors.
+  validateAdapterStructure = { schema, adapter, templateNames ? null }:
+    structuralProblems {
+      inherit schema adapter;
+      templateNames =
+        if templateNames == null then
+          builtins.attrNames adapter
+        else
+          templateNames;
+    };
+
   validateHostAdapter = { schema, adapter, templateNames ? null }:
     let
       tplNames =
@@ -432,5 +457,12 @@ let
     ++ probes schema adapter tplNames interfaces;
 in
 {
-  inherit schemaVersion schemaFormat readSchema renderStepConfig validateHostAdapter;
+  inherit
+    schemaVersion
+    schemaFormat
+    readSchema
+    renderStepConfig
+    validateAdapterStructure
+    validateHostAdapter
+    ;
 }

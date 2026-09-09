@@ -22,8 +22,8 @@
 #   bindings.<param> = { ... }          # presentation overlay
 #   builderArgs.<name> = { ... }        # adapter-owned editable inputs
 # The core argument schema is the only parameter authority (names, order,
-# kinds, shapes, defaults, requiredness); the conformance check validates
-# the host's presentation overrides against it as build-time inputs.
+# kinds, shapes, defaults, requiredness); the stepConfig build validates
+# the host's presentation overrides against it.
 #
 # The kernel is computed at flake level (pkgs comes from the host option);
 # derivation views land in packages.pointy, typed `package`.
