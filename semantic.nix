@@ -51,12 +51,8 @@ in
 
       resolveBundle = name: spec:
         let
-          bundleScope = sel.language.pointyScanners.${system};
-          bundle =
-            if builtins.hasAttr name bundleScope then
-              bundleScope.${name}
-            else
-              throw "pointy.semantic: no scanner bundle `${name}' in the language flake's pointyScanners.${system}";
+          bundle = sel.language.pointyScanners.${system}.${name} or
+            (throw "pointy.semantic: no scanner bundle `${name}' in the language flake's pointyScanners.${system}");
         in
         {
           interface = spec.interface or bundle.interface;
@@ -64,12 +60,6 @@ in
         };
 
       resolvedScanners = builtins.mapAttrs resolveBundle sel.scanners;
-
-      projectionOf = params: args:
-        builtins.listToAttrs (builtins.map (p: {
-          name = p.param;
-          value = args.${p.param};
-        }) params);
 
       templates = top.config.pointy.templates;
       records = top.config.pointy.stepDefs;
@@ -140,13 +130,7 @@ in
       # ---- Classification + handle re-wrap ------------------------------
       handleOfStep = value:
         handles.${builtins.toString value.meta.pointy.id} or (throw "pointy.semantic: resolved step reference is missing meta.pointy.id");
-      wrapHandles = kind: value:
-        if kind == "subject" || kind == "listSubject" then
-          handleOfStep value
-        else if kind == "subjects" then
-          builtins.map handleOfStep value
-        else
-          value;
+      wrapHandles = pointyLib.mapSubjectRefs handleOfStep;
 
       # ---- Per-record handles --------------------------------------------
       handleResult = id: rec_:
@@ -169,15 +153,14 @@ in
               else
                 value
             ) rawStep.meta.pointy.args;
-            contract = templates.${rec_.type}.contract;
             callArgs = meta.defaults // resolvedHandles // { inherit id; };
           in
           (langLib.mkSidecar {
             source = entrySource;
             modules = entryModules;
-            interface = contract.interface;
+            interface = meta.interface;
             output = meta.output;
-            arguments = projectionOf meta.params;
+            arguments = builtins.intersectAttrs meta.paramKinds;
             construct = _args: rawStep;
             scanners = scannerBundles;
             key = id;
@@ -185,15 +168,10 @@ in
 
       handles = builtins.mapAttrs handleResult records;
 
-      unresolvable = builtins.attrNames (
-        lib.filterAttrs (_: h: h.__unresolvable or false) handles
-      );
+      resolvable = lib.filterAttrs (_: h: !(h.__unresolvable or false)) handles;
+      unresolvable = builtins.attrNames (lib.filterAttrs (_: h: h.__unresolvable or false) handles);
 
-      resolvableMap = pick:
-        builtins.foldl' (acc: id:
-          let h = handles.${id}; in
-          if h.__unresolvable or false then acc else acc // { "${id}" = pick h; }
-        ) { } (builtins.attrNames handles);
+      resolvableMap = pick: builtins.mapAttrs (_: pick) resolvable;
 
       transport = {
         applications = langLib.pointyApplicationsDoc {

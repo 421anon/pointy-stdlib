@@ -20,6 +20,28 @@ rec {
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
 
+  isSubjectKind = kind:
+    kind == "subject" || kind == "subjects" || kind == "listSubject";
+
+  # A core subject parameter's references as a list.
+  subjectRefs = kind: value:
+    if kind == "subjects" then
+      value
+    else if isSubjectKind kind then
+      [ value ]
+    else
+      [ ];
+
+  # Applies `f` to a core subject parameter's reference(s); other kinds
+  # pass through unchanged.
+  mapSubjectRefs = f: kind: value:
+    if kind == "subjects" then
+      builtins.map f value
+    else if isSubjectKind kind then
+      f value
+    else
+      value;
+
   loadDir =
     dir:
     builtins.readDir dir
@@ -41,13 +63,11 @@ rec {
     let
       schemaFormat = "pointy-argument-schema";
       schemaVersion = 1;
-      format = schema.format or (throw "pointy core schema: missing `format`");
-      version = schema.version or (throw "pointy core schema: missing `version`");
       _abi =
-        if format != schemaFormat then
-          throw "pointy core schema: unsupported format `${format}` (expected `${schemaFormat}`)"
-        else if version != schemaVersion then
-          throw "pointy core schema: unsupported version `${toString version}` (expected ${toString schemaVersion})"
+        if (schema.format or (throw "pointy core schema: missing `format`")) != schemaFormat then
+          throw "pointy core schema: unsupported format `${schema.format}` (expected `${schemaFormat}`)"
+        else if (schema.version or (throw "pointy core schema: missing `version`")) != schemaVersion then
+          throw "pointy core schema: unsupported version `${toString schema.version}` (expected ${toString schemaVersion})"
         else
           null;
       interfaces = builtins.seq _abi (
@@ -60,9 +80,6 @@ rec {
         contract = template.contract or (throw "pointy.template `${name}': contract missing");
         interface = contract.interface or (throw "pointy.template `${name}': contract.interface missing");
         iface = interfaces.${interface} or (throw "pointy.template `${name}': interface `${interface}' is not declared by the core schema");
-        schemaParams = iface.parameters or [ ];
-        bindings = template.bindings or { };
-        builderArgs = template.builderArgs or { };
         kind = template.pointy.type;
         specialArgs =
           if kind ? fileUpload then
@@ -81,27 +98,21 @@ rec {
             default = sp.default or null;
             required = sp.required or true;
           }
-        ) schemaParams;
+        ) (iface.parameters or [ ]);
         paramNames = builtins.map (p: p.param) params;
-        problems =
-          builtins.map
-            (n: "unknown binding `${n}': not a core parameter of `${interface}' (did you mean builderArgs?)")
-            (builtins.filter (n: !builtins.elem n paramNames) (builtins.attrNames bindings))
-          ++ builtins.map
-            (n: "builder argument `${n}' collides with a core parameter of `${interface}'")
-            (builtins.filter (n: builtins.elem n paramNames) (builtins.attrNames builderArgs));
+        unknownBindings = builtins.filter (
+          n: !builtins.elem n paramNames
+        ) (builtins.attrNames (template.bindings or { }));
         _validated =
-          if problems == [ ] then
+          if unknownBindings == [ ] then
             null
           else
-            throw ("pointy.template `${name}': " + nixpkgs.lib.concatStringsSep "; " problems);
-
-        builderDefaults = builtins.listToAttrs (
-          builtins.map (n: {
-            name = n;
-            value = builderArgs.${n}.default;
-          }) (builtins.filter (n: builderArgs.${n} ? default) (builtins.attrNames builderArgs))
-        );
+            throw (
+              "pointy.template `${name}`: "
+              + nixpkgs.lib.concatStringsSep "; " (
+                builtins.map (n: "unknown binding `${n}': not a core parameter of `${interface}'") unknownBindings
+              )
+            );
       in
       builtins.seq _validated {
         inherit interface params;
@@ -112,21 +123,18 @@ rec {
             value = p.kind;
           }) params
         );
-        # Core defaults first, then host builder-argument defaults.
-        defaults =
-          builtins.listToAttrs (
-            builtins.map (p: {
-              name = p.param;
-              value = p.default;
-            }) (builtins.filter (p: p.default != null) params)
-          )
-          // builderDefaults;
-        knownArgs = paramNames ++ (builtins.attrNames builderArgs) ++ specialArgs;
+        # Core defaults, in schema order.
+        defaults = builtins.listToAttrs (
+          builtins.map (p: {
+            name = p.param;
+            value = p.default;
+          }) (builtins.filter (p: p.default != null) params)
+        );
+        knownArgs = paramNames ++ specialArgs;
         requiredArgs =
           builtins.map (p: p.param) (
             builtins.filter (p: p.required && p.kind != "subjects") params
           )
-          ++ builtins.filter (n: !(builderArgs.${n} ? default)) (builtins.attrNames builderArgs)
           ++ specialArgs;
       }
     ) templates;
@@ -171,13 +179,7 @@ rec {
         template = templates.${type};
         templateKind = template.pointy.type;
 
-        resolveByKind = k: value:
-          if k == "subject" || k == "listSubject" then
-            steps.${stepIdFromRef value}
-          else if k == "subjects" then
-            builtins.map (ref: steps.${stepIdFromRef ref}) value
-          else
-            value;
+        resolveByKind = mapSubjectRefs (ref: steps.${stepIdFromRef ref});
 
         resolve = builtins.mapAttrs (
           argName: value:
@@ -386,14 +388,7 @@ rec {
   evalDependencies =
     { stepDefs, templates, metas, ... }:
     let
-      getDepIds =
-        k: value:
-        if k == "subject" || k == "listSubject" then
-          [ (stepIdFromRef value) ]
-        else if k == "subjects" then
-          builtins.map stepIdFromRef value
-        else
-          [ ];
+      getDepIds = kind: value: builtins.map stepIdFromRef (subjectRefs kind value);
 
       directDepsOf =
         id:
