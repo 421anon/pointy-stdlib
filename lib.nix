@@ -7,10 +7,16 @@
 pointyLib: rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
-  # The pure (nixpkgs-free) core-schema merge + conformance module,
-  # importable from nix-instantiate builders (stepConfig derivation and
-  # the host conformance check) and from here.
   stepConfigPure = import ./lib/step-config.nix { };
+
+  api = {
+    inherit
+      mkFlake
+      loadDir
+      csvExtras
+      fastqExtras
+      ;
+  };
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
 
@@ -26,32 +32,8 @@ pointyLib: rec {
 
   # ---- Contract / construction tables --------------------------------
   #
-  # Each template authors one plain-data table:
-  #   contract = { interface = "..."; output ? "out"; };
-  # Records, adapter argument maps, and compile args use `param`.
-  #   bindings.<param> = { … };   # OPTIONAL presentation override
-  #   builderArgs.<name> = { description; displayName ? null; default ? …;
-  #     type = <explicit descriptor>; };   # adapter-owned editable inputs
-  #
-  # Semantic authority is the CORE argument schema (a derivation a host
-  # realizes to register at eval, IFD per user policy): parameter names,
-  # order, kind, shape, finite domain, default, and requiredness all come
-  # from it.  `kind` (value/subject/subjects/listSubject) drives raw
-  # reference resolution, dependency discovery, and handle re-wrapping.
-  # Nothing semantic is copied into the template table.
-  # `bindings` provides presentation overrides (host-time, build input):
-  # widgets, dropdowns, reference types, labels, autocomplete.  Unknown
-  # override names reject.
-  #
-  # Returns per template:
-  #   params        : [ { param, kind } ] in schema order
-  #   output        : the certified named output (default "out")
-  #   paramKinds    : param name -> kind                       (resolution;
-  #                   records are keyed by param)
-  #   defaults      : authored defaults for builder args
-  #   builderArgs   : name -> authored builder arg table
-  #   knownArgs     : every param name a record may carry (incl. the
-  #                   upload/download transport names)
+  # Parameter names, order, kind, shape, domain, default, and
+  # requiredness come from the core schema.
   templateMeta =
     { templates, schema }:
     let
@@ -80,6 +62,9 @@ pointyLib: rec {
           {
             param = sp.parameter or (throw "pointy core schema: interface `${interface}' has a parameter without a name");
             kind = sp.kind or (throw "pointy core schema: parameter `${sp.parameter or "?"}' of `${interface}' has no kind");
+            shape = sp.shape or null;
+            default = sp.default or null;
+            required = sp.required or true;
           }
         ) schemaParams;
         paramNames = builtins.map (p: p.param) params;
@@ -102,14 +87,6 @@ pointyLib: rec {
             value = builderArgs.${n}.default;
           }) (builtins.filter (n: builderArgs.${n} ? default) (builtins.attrNames builderArgs))
         );
-        # The raw pipeline reads from the record the transport
-        # upload/download values and builder args lacking an adapter
-        # default.  Semantic parameters are not required at eval: core
-        # defaults (value params) and the canonical empty acquisition
-        # lists (producer params) are supplied by the
-        # core-authoritative normalization boundary — value defaults in
-        # the step builder from the schema, empty producers structurally
-        # here — so defaultless saved records keep building.
         requiredArgs =
           builtins.filter (n: !(builderArgs.${n} ? default)) (builtins.attrNames builderArgs)
           ++ specialArgs;
@@ -123,17 +100,21 @@ pointyLib: rec {
             value = p.kind;
           }) params
         );
+        coreDefaults = builtins.listToAttrs (
+          builtins.map (p: {
+            name = p.param;
+            value = p.default;
+          }) (builtins.filter (p: p.default != null) params)
+        );
+        coreRequiredNames = builtins.map (p: p.param) (
+          builtins.filter (p: p.required && p.kind != "subjects") params
+        );
         defaults = builderDefaults;
         knownArgs = paramNames ++ (builtins.attrNames builderArgs) ++ specialArgs;
         inherit requiredArgs;
       }
     ) templates;
 
-  # Serialize the host's template tables into the plain-data `adapter`
-  # document the stepConfig merge and the conformance check consume as a
-  # build input: identity plus the raw `bindings` (presentation
-  # overrides) and `builderArgs`.  Semantic parameters come from the
-  # core schema, never from here.
   hostAdapter =
     templates:
     builtins.mapAttrs (
@@ -142,7 +123,7 @@ pointyLib: rec {
         contract = template.contract or (throw "pointy.template `${name}': contract missing");
       in
       {
-        interface = contract.interface;
+        interface = contract.interface or (throw "pointy.template `${name}': contract.interface missing");
         bindings = template.bindings or { };
         builderArgs = template.builderArgs or { };
         sortKey = template.sortKey or null;
@@ -153,94 +134,22 @@ pointyLib: rec {
       }
     ) templates;
 
-  # The conformance + merge surface exposed to hosts.  renderStepConfig
-  # merges the core schema with the host adapter into the frontend's
-  # stepConfig document; validateHostAdapter reports adapter-vs-schema
-  # violations for the flake-check gate.
   renderStepConfig = stepConfigPure.renderStepConfig;
-  validateHostAdapter = stepConfigPure.validateHostAdapter;
 
-  # ---- Host schema + stepConfig derivations ---------------------------
-  #
-  # The core argument schema is per-host, generated by the core over the
-  # host's OWN enrolled sources (`pointy check --schema`); the schema is
-  # a derivation output.  It is realized and read at evaluation
-  # (user-authorized IFD) for construction defaults and requiredness,
-  # and consumed as a build input by the stepConfig derivation and the
-  # conformance check.  Produced fresh per host; not authored by hand.
+  # ---- Host schema derivation -----------------------------------------
 
-  # The canonical argument schema of one host corpus (a file output).
   mkContractSchema =
     { pkgs, pointy, entryTree, modules }:
     let
       modulesJson = builtins.toFile "pointy-modules.json" (builtins.toJSON modules);
     in
     pkgs.runCommand "pointy-contract-schema" {
-      inherit pointy;
       ENTRY_TREE = entryTree;
       MODULES = modulesJson;
       nativeBuildInputs = [ pointy ];
       preferLocalBuild = true;
     } ''
       pointy check "$ENTRY_TREE/main.pointy" --modules "$MODULES" --schema > "$out"
-    '';
-
-  # The host-generated stepConfig document: the core schema merged with
-  # the host's presentation overrides (bindings), rendered by the pure
-  # merge module and emitted as a derivation.  The build fails when the
-  # adapter tables break the schema's structural rules or an overlay;
-  # the backend serves the realized file.
-  mkStepConfig =
-    { pkgs, schema, templates }:
-    let
-      adapter = builtins.toFile "pointy-adapter.json" (builtins.toJSON (hostAdapter templates));
-    in
-    pkgs.runCommand "pointy-step-config" {
-      inherit schema adapter;
-      nativeBuildInputs = [ pkgs.nix ];
-      preferLocalBuild = true;
-      HOME = "/tmp";
-      NIX_STATE_DIR = "/tmp/nix-state";
-      NIX_LOG_DIR = "/tmp/nix-log";
-    } ''
-      nix-instantiate --eval --strict --json \
-        --argstr schemaPath "$schema" \
-        --argstr adapterPath "$adapter" \
-        --argstr stepConfigPath ${./lib/step-config.nix} \
-        ${./lib/step-config-render.nix} > "$out"
-    '';
-
-  # The host conformance gate: a check derivation (never an output) that
-  # requires the adapter tables (parameter set, kinds, construction
-  # defaults, bindings, builderArgs) to merge cleanly and agree with the
-  # core schema.  Fails with every violation; the probes guarantee the
-  # gate is not vacuous.
-  checkHostConformance =
-    { pkgs, schema, adapter }:
-    let
-      adapterJson = builtins.toFile "pointy-adapter.json" (builtins.toJSON adapter);
-    in
-    pkgs.runCommand "pointy-host-conformance" {
-      inherit schema adapterJson;
-      nativeBuildInputs = [ pkgs.nix pkgs.jq ];
-      preferLocalBuild = true;
-      HOME = "/tmp";
-      NIX_STATE_DIR = "/tmp/nix-state";
-      NIX_LOG_DIR = "/tmp/nix-log";
-    } ''
-      set -euo pipefail
-      nix-instantiate --eval --strict --json \
-        --argstr schemaPath "$schema" \
-        --argstr adapterPath "$adapterJson" \
-        --argstr stepConfigPath ${./lib/step-config.nix} \
-        ${./lib/step-config-validate.nix} > problems.json
-      if [ "$(jq 'length' problems.json)" != "0" ]; then
-        echo "pointy host conformance failed:"
-        jq -r '.[]' problems.json
-        exit 1
-      fi
-      echo "ok: host adapter merges cleanly with the core schema"
-      touch "$out"
     '';
 
   evalSteps =
@@ -254,17 +163,14 @@ pointyLib: rec {
     }:
     let
       steps = evalSteps args;
-      # The core argument schema, realized and read at EVAL (IFD,
-      # user-approved): the parameter table (names, order, kinds),
-      # defaults, and requiredness all come from it.  Realized once;
-      # every step reads the same value.
       coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
       metas = templateMeta { inherit templates; schema = coreSchema; };
       compiledTemplates = builtins.mapAttrs (
         _: template:
         template.compile {
           lib = nixpkgs.lib;
-          inherit pkgs pointyLib;
+          inherit pkgs;
+          pointyLib = api;
         }
       ) templates;
       defaultRequirements = {
@@ -288,11 +194,6 @@ pointyLib: rec {
         template = templates.${type};
         templateKind = template.pointy.type;
 
-        # Kind-driven reference resolution: contract parameters of kind
-        # subject/subjects/listSubject carry `{step = id;}` references
-        # that resolve to sibling raw derivations; uploads/downloads
-        # resolve through their fixed-output fetch rules; everything
-        # else passes through unchanged.
         resolveByKind = k: value:
           if k == "subject" || k == "listSubject" then
             steps.${stepIdFromRef value}
@@ -330,12 +231,7 @@ pointyLib: rec {
       in
       let
         resolvedArgs =
-          # Producer parameters (subject/subjects/listSubject kinds) that
-          # the record omits get the canonical EMPTY acquisition list
-          # here — a structural default, not a copied core value (the
-          # core spell-it-as-@subjects = [ ]@ envelope).  Single-subject
-          # producers with no record value stay missing and are rejected
-          # by the core check, never silently empty.
+          # The core's canonical empty acquisition is a plain empty array.
           resolve
           // builtins.listToAttrs (
             builtins.map (p: {
@@ -351,32 +247,8 @@ pointyLib: rec {
           else
             (template.requirements or (_: defaultRequirements)) resolvedArgs;
         unknown = nixpkgs.lib.subtractLists meta.knownArgs (builtins.attrNames args);
-        # Adapter-level requiredness: transport uploads/downloads and
-        # builder args lacking a default.  Semantic requiredness comes
-        # from the core schema below (user-approved IFD).
         missing = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.requiredArgs;
-        # The core schema realized + read at EVAL (IFD, user-approved):
-        # canonical defaults and requiredness.
-        iface = coreSchema.interfaces.${template.contract.interface} or (throw "pointy.${type}: interface `${template.contract.interface}' is not declared by the core schema");
-        coreDefaults =
-          builtins.listToAttrs (
-            builtins.map (
-              sp:
-              {
-                name = sp.parameter;
-                value = sp.default;
-              }
-            ) (builtins.filter (sp: sp.default != null) iface.parameters)
-          );
-        coreRequiredNames =
-          builtins.map (
-            sp: sp.parameter
-          ) (builtins.filter (
-            sp:
-            (sp.required or true)
-            && (sp.kind or "value") != "subjects"
-          ) iface.parameters);
-        missingCore = nixpkgs.lib.subtractLists (builtins.attrNames args) coreRequiredNames;
+        missingCore = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.coreRequiredNames;
         normalizedArgs =
           if unknown != [ ] then
             throw "pointy.${type}: unknown arg(s): ${nixpkgs.lib.concatStringsSep ", " unknown}"
@@ -385,8 +257,7 @@ pointyLib: rec {
           else if missingCore != [ ] then
             throw "pointy.${type}: missing required core param(s): ${nixpkgs.lib.concatStringsSep ", " missingCore}"
           else
-            # Schema defaults under the raw record values.
-            coreDefaults // resolvedArgs // {
+            meta.coreDefaults // meta.defaults // resolvedArgs // {
               inherit id;
             };
         sourceOverride =
@@ -398,8 +269,7 @@ pointyLib: rec {
             {
               dontUnpack = true;
             };
-        # Records are canonical: normalizedArgs is param-keyed and the
-        # template's compile block reads cfg.<param> directly.
+        # Templates read compile args as cfg.<param>.
         cfg = compiledTemplates.${type}.build {
           args = normalizedArgs;
           public = result;
@@ -578,66 +448,22 @@ pointyLib: rec {
         else
           [ ];
 
-      visit =
-        depId: visited:
-        if builtins.elem depId visited then
-          {
-            result = [ ];
-            visited = visited;
-          }
-        else
-          let
-            deps = directDepsOf depId;
-            newVisited = visited ++ [ depId ];
-            afterDeps =
-              builtins.foldl'
-                (
-                  acc: d:
-                  let
-                    sub = visit d acc.visited;
-                  in
-                  {
-                    result = acc.result ++ sub.result;
-                    visited = sub.visited;
-                  }
-                )
-                {
-                  result = [ ];
-                  visited = newVisited;
-                }
-                deps;
-          in
-          {
-            result = afterDeps.result ++ [ depId ];
-            visited = afterDeps.visited;
-          };
-
+      # The backend's RunStep graph walk consumes this as a set.
       transitiveDepsOf =
         id:
-        (builtins.foldl'
-          (
-            acc: dep:
-            let
-              sub = visit dep acc.visited;
-            in
-            {
-              result = acc.result ++ sub.result;
-              visited = sub.visited;
+        builtins.filter (d: d != id) (
+          builtins.map (n: n.key) (
+            builtins.genericClosure {
+              startSet = [ { key = id; } ];
+              operator = node: builtins.map (d: { key = d; }) (directDepsOf node.key);
             }
           )
-          {
-            result = [ ];
-            visited = [ id ];
-          }
-          (directDepsOf id)
-        ).result;
+        );
     in
     builtins.mapAttrs (id: _: transitiveDepsOf id) stepDefs;
 
-  # Build a derivation that scans `baseDrv` for CSV/TSV files and emits a
-  # meta.json per directory containing column metadata (type + nullable).
-  # Uses duckdb sniff_csv for type detection and UNPIVOT for nullability.
-  # `baseDrv` is the step output derivation.
+  # Scans `baseDrv` for CSV/TSV files and emits a meta.json per
+  # directory with column metadata (type + nullable).
   csvExtras =
     {
       pkgs,
@@ -658,9 +484,8 @@ pointyLib: rec {
     ''
     // { inherit requirements; };
 
-  # Build a derivation that scans `baseDrv` for FASTQ files (*.fastq,
-  # *.fq, *.fastq.gz, *.fq.gz) and emits a meta.json per directory with
-  # readCount.  Fails the build when a file's line count is not divisible by 4.
+  # Scans `baseDrv` for FASTQ files and emits a meta.json per directory
+  # with readCount; a line count not divisible by 4 fails the build.
   fastqExtras =
     {
       pkgs,
@@ -676,28 +501,6 @@ pointyLib: rec {
       bash ${./lib/fastq-extras.sh} \
         "${baseDrv}" \
         "$out"
-    ''
-    // { inherit requirements; };
-
-  # Merge multiple extras derivations into one.  Each derivation is a
-  # directory tree of meta.json files (keyed by child file name).  Duplicate
-  # child-file keys within the same directory fail the build.
-  mergeExtras =
-    {
-      pkgs,
-      extras,
-      requirements ? {
-        ram = "1G";
-        cpu = 1;
-        ior = "0";
-        iow = "0";
-      },
-    }:
-    let
-      srcs = nixpkgs.lib.concatStringsSep " " (map (e: "\"${e}\"" ) extras);
-    in
-    pkgs.runCommand "merged-extras" { } ''
-      bash ${./lib/merge-extras.sh} ${pkgs.jq}/bin/jq "$out" ${srcs}
     ''
     // { inherit requirements; };
 
