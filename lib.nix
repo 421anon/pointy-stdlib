@@ -131,19 +131,6 @@ rec {
       }
     ) templates;
 
-  # ---- Host schema derivation -----------------------------------------
-
-  mkContractSchema =
-    { pkgs, pointy, entryTree, modulesFile }:
-    pkgs.runCommand "pointy-contract-schema" {
-      ENTRY_TREE = entryTree;
-      MODULES = modulesFile;
-      nativeBuildInputs = [ pointy ];
-      preferLocalBuild = true;
-    } ''
-      pointy check "$ENTRY_TREE/main.pointy" --modules "$MODULES" --schema > "$out"
-    '';
-
   evalSteps =
     args@{
       stepDefs,

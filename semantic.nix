@@ -74,11 +74,9 @@ in
       templates = top.config.pointy.templates;
       records = top.config.pointy.stepDefs;
       modulesFile = builtins.toFile "pointy-modules.json" (builtins.toJSON sel.modules);
-      contractSchema = pointyLib.mkContractSchema {
-        inherit pkgs;
-        pointy = sel.language.packages.${system}.pointy;
-        entryTree = entryTree;
-        inherit modulesFile;
+      contractSchema = langLib.mkArgumentSchema {
+        source = entrySource;
+        modules = entryModules;
       };
       coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
       metas = pointyLib.templateMeta { inherit templates; schema = coreSchema; };
