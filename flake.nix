@@ -14,12 +14,7 @@
   };
 
   outputs =
-    inputs@{
-      self,
-      nixpkgs,
-      flake-parts,
-      pointy-lang,
-    }:
+    inputs@{ ... }:
     let
       pointyLib = import ./lib.nix inputs;
       semanticModule = import ./semantic.nix {
@@ -29,8 +24,6 @@
     in
     {
       lib = pointyLib.api;
-      # The pointy language flake hosts take as `semantic.language`.
-      language = pointy-lang;
 
       flakeModules = {
         semantic = semanticModule;
