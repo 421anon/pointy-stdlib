@@ -27,6 +27,8 @@ pointyLib.mkFlake { inherit inputs; } ({ inputs, ... }: {
 
 `semantic.language` must expose `lib.forSystem` and `pointyExtensions.<system>`: each logical extension is the same-named `pointyExtensions` document (a `source` plus optional `observer`), enrolled at its source-relative `path`.
 
+One `nixpkgs`, and the compiler owns the choice: this flake's `nixpkgs` follows `pointy-lang/nixpkgs`, so the compiler is built with the rev the language's own lock tests against. A host that wants the library and its raw steps on its own nixpkgs sets `pointy-stdlib.inputs.nixpkgs.follows = "nixpkgs"` (the compiler keeps the language's pin unless the host also follows into `pointy-lang`).
+
 The language integration is the compiler's `argumentSchema`: the library hands over the program and its extension sources, and the language builds the import layout, runs the core's source pass (`pointy-certify --mode schema`, IFD at eval — an invalid source fails evaluation with the core's located diagnostic) and returns the parsed document. The document is argument-schema version 3: every parameter carries one recursive `shape`, whose leaves are either wire data or an artifact (`subject`) position — a producer parameter is a `subject` leaf, and an ordered family of producers is an array of `subject` leaves — so no data type's identity reaches the host vocabulary. `templateMeta` merges that document with the host's `bindings`, and `evalSteps` builds the raw steps against its parameter table. Per-record certification is out of scope: nothing in the library builds a certificate derivation.
 
 ## Flake outputs

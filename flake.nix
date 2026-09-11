@@ -1,15 +1,18 @@
 {
   inputs = {
-    nixpkgs = {
-      url = "github:NixOS/nixpkgs";
-    };
+    # One nixpkgs, and the compiler owns the choice: the language's lock
+    # pins the rev its own build is tested against, and this library
+    # builds the compiler.  A downstream host that wants its own nixpkgs
+    # overrides with `pointy-stdlib.inputs.nixpkgs.follows = "nixpkgs"`
+    # (the compiler keeps the language's pin unless the host also follows
+    # into `pointy-lang`).
+    nixpkgs.follows = "pointy-lang/nixpkgs";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
     pointy-lang = {
       url = "path:/root/src/pointy-lang";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
