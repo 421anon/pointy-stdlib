@@ -20,22 +20,12 @@ rec {
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
 
-  # Core subject kinds carry step references; `subjects` carries a list.
-  subjectRefs = kind: value:
-    if kind == "subjects" then
-      value
-    else if kind == "subject" || kind == "listSubject" then
-      [ value ]
-    else
-      [ ];
+  # A producer parameter's acquisition arity: one reference, or an
+  # ordered family of references whose empty form is legal.
+  subjectRefs = arity: value: if arity == "many" then value else [ value ];
 
-  mapSubjectRefs = f: kind: value:
-    if kind == "subjects" then
-      builtins.map f value
-    else if kind == "subject" || kind == "listSubject" then
-      f value
-    else
-      value;
+  mapSubjectRefs = f: arity: value:
+    if arity == "many" then builtins.map f value else f value;
 
   loadDir =
     dir:
@@ -47,13 +37,36 @@ rec {
       }
     );
 
-  # The core schema is the single authority for parameter names, order, kinds,
-  # shapes, defaults, and requiredness; `templateMeta` is its one reader.  The
+  # The core schema is the single authority for parameter names, order, shapes,
+  # defaults, and requiredness; `templateMeta` is its one reader.  The
   # language's `argumentSchema` has already validated the document.
   templateMeta =
     { templates, schema }:
     let
-      interfaces = schema.interfaces;
+      # This stdlib reads argument-schema version 3 (one recursive shape
+      # per parameter); any other version fails here, never as a
+      # misrendered stepConfig.
+      interfaces =
+        if schema.version or 0 == 3 then
+          schema.interfaces
+        else
+          throw "pointy templateMeta: the language provides argument-schema version ${builtins.toString (schema.version or 0)}; this stdlib reads version 3 (shape)";
+
+      # A parameter's shape is its single description: the subject leaf
+      # (one producer) or a list of subject leaves (many, empty-allowed);
+      # every other shape is wire data.
+      arityOf =
+        shape:
+        if shape == null then
+          null
+        else if shape.kind == "subject" then
+          "one"
+        else if
+          shape.kind == "array" && (shape.element.kind or null) == "subject"
+        then
+          "many"
+        else
+          null;
     in
     builtins.mapAttrs (
       name: template:
@@ -72,10 +85,13 @@ rec {
 
         params = builtins.map (
           sp:
+          let
+            shape = sp.shape or null;
+          in
           {
             param = sp.parameter or (throw "pointy core schema: interface `${interface}' has a parameter without a name");
-            kind = sp.kind or (throw "pointy core schema: parameter `${sp.parameter or "?"}' of `${interface}' has no kind");
-            shape = sp.shape or null;
+            arity = arityOf shape;
+            inherit shape;
             default = sp.default or null;
             required = sp.required or true;
           }
@@ -98,11 +114,11 @@ rec {
       builtins.seq _validated {
         inherit interface params;
         output = contract.output or "out";
-        paramKinds = builtins.listToAttrs (
+        subjectArity = builtins.listToAttrs (
           builtins.map (p: {
             name = p.param;
-            value = p.kind;
-          }) params
+            value = p.arity;
+          }) (builtins.filter (p: p.arity != null) params)
         );
         defaults = builtins.listToAttrs (
           builtins.map (p: {
@@ -113,7 +129,7 @@ rec {
         knownArgs = paramNames ++ specialArgs;
         requiredArgs =
           builtins.map (p: p.param) (
-            builtins.filter (p: p.required && p.kind != "subjects") params
+            builtins.filter (p: p.required && p.arity != "many") params
           )
           ++ specialArgs;
       }
@@ -159,12 +175,12 @@ rec {
         template = templates.${type};
         templateKind = template.pointy.type;
 
-        resolveByKind = mapSubjectRefs (ref: steps.${stepIdFromRef ref});
+        resolveByArity = mapSubjectRefs (ref: steps.${stepIdFromRef ref});
 
         resolve = builtins.mapAttrs (
           argName: value:
-          if meta.paramKinds ? ${argName} then
-            resolveByKind meta.paramKinds.${argName} value
+          if meta.subjectArity ? ${argName} then
+            resolveByArity meta.subjectArity.${argName} value
           else if templateKind ? fileUpload && argName == "uploaded" then
             pkgs.stdenv.mkDerivation {
               name = "store-ref";
@@ -195,7 +211,7 @@ rec {
               name = p.param;
               value = [ ];
             }) (builtins.filter (
-              p: p.kind == "subjects" && !(resolve ? ${p.param})
+              p: p.arity == "many" && !(resolve ? ${p.param})
             ) meta.params)
           );
         resolvedRequirements =
@@ -379,8 +395,8 @@ rec {
             builtins.attrValues (
               builtins.mapAttrs (
                 argName: value:
-                if metas.${stepDef.type}.paramKinds ? ${argName} then
-                  getDepIds metas.${stepDef.type}.paramKinds.${argName} value
+                if metas.${stepDef.type}.subjectArity ? ${argName} then
+                  getDepIds metas.${stepDef.type}.subjectArity.${argName} value
                 else
                   [ ]
               ) stepDef.args

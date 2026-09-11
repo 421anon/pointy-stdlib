@@ -3,15 +3,21 @@
 let
   baseKeys = [ "description" "displayName" ];
 
-  isSubjectKind = kind:
-    kind == "subject" || kind == "subjects" || kind == "listSubject";
+  # An artifact position: the subject leaf, or the ordered list of
+  # subject leaves whose empty form is legal.
+  isSubject =
+    shape:
+    shape != null
+    && (shape.kind == "subject"
+        || (shape.kind == "array" && (shape.element.kind or null) == "subject"));
 
-  # Presentation keys the core kind/shape accepts.
-  allowedKeys = kind: shape:
-    if isSubjectKind kind then
-      [ "allowedTypes" "quickCreate" ]
-    else if shape == null then
+  # Presentation keys the core shape accepts.
+  allowedKeys =
+    shape:
+    if shape == null then
       [ ]
+    else if isSubject shape then
+      [ "allowedTypes" "quickCreate" ]
     else
       {
         scalar = [ "display" "autocomplete" ];
@@ -21,9 +27,9 @@ let
       }
       .${shape.kind} or [ ];
 
-  rejectUnknown = path: kind: shape: node:
+  rejectUnknown = path: shape: node:
     let
-      unknown = builtins.filter (k: !builtins.elem k (baseKeys ++ allowedKeys kind shape)) (
+      unknown = builtins.filter (k: !builtins.elem k (baseKeys ++ allowedKeys shape)) (
         builtins.attrNames node
       );
     in
@@ -40,19 +46,19 @@ let
     { display = b.display or { }; }
     // (if b ? autocomplete then { inherit (b) autocomplete; } else { });
 
-  # core shape -> notebook wire type.  `kind` is null for record fields
-  # and list elements, which carry no acquisition kind.
-  wireType = path: kind: shape: node:
+  # core shape -> notebook wire type.  An artifact position renders as the
+  # notebook's step descriptor (the subject leaf, or its ordered list);
+  # every other shape renders by its wire form.
+  wireType = path: shape: node:
     let
       b = if node == null then { } else node;
       rendered =
-        if isSubjectKind kind then
-          if kind == "subjects" then
-            { list = { step = stepAttrs b; }; }
-          else
-            { step = stepAttrs b; }
-        else if shape == null then
+        if shape == null then
           throw "pointy core schema: parameter has no renderable shape"
+        else if shape.kind == "subject" then
+          { step = stepAttrs b; }
+        else if shape.kind == "array" && (shape.element.kind or null) == "subject" then
+          { list = { step = stepAttrs b; }; }
         else if shape.kind == "scalar" then
           if shape.scalar == "text" then
             { string = stringAttrs b; }
@@ -66,7 +72,7 @@ let
             enumDisplayNames = b.enumDisplayNames or { };
           }
         else if shape.kind == "array" then
-          { list = wireType (path + ".list") null shape.element (b.list or { }); }
+          { list = wireType (path + ".list") shape.element (b.list or { }); }
         else if shape.kind == "record" then
           let
             overlays = if b ? record then b.record.fields or (throw "pointy template: ${path} is missing `fields`") else { };
@@ -84,7 +90,7 @@ let
               builtins.map
                 (f: {
                   name = f.name;
-                  value = argType (path + ".fields." + f.name) null f.shape (overlays.${f.name} or { });
+                  value = argType (path + ".fields." + f.name) f.shape (overlays.${f.name} or { });
                 })
                 shape.fields
             );
@@ -92,13 +98,13 @@ let
         else
           throw "pointy core schema: unrenderable shape kind `${shape.kind}`";
     in
-    builtins.seq (rejectUnknown path kind shape b) rendered;
+    builtins.seq (rejectUnknown path shape b) rendered;
 
-  argType = path: kind: shape: node:
+  argType = path: shape: node:
     {
       description = node.description or "";
       displayName = node.displayName or null;
-      type = wireType path kind shape node;
+      type = wireType path shape node;
     };
 
   renderStepConfig = { templates, metas }:
@@ -114,7 +120,7 @@ let
           problems = builtins.concatLists (
             builtins.map
               (p:
-                if isSubjectKind p.kind then
+                if isSubject p.shape then
                   builtins.map
                     (t: "allowedTypes value `${t}' names no template")
                     (builtins.filter
@@ -132,7 +138,7 @@ let
           ) (builtins.listToAttrs (
             builtins.map (p: {
               name = p.param;
-              value = argType (meta.interface + "." + p.param) p.kind p.shape (bindings.${p.param} or { })
+              value = argType (meta.interface + "." + p.param) p.shape (bindings.${p.param} or { })
                 // (if p.default != null then { inherit (p) default; } else { });
             }) meta.params
           ));
