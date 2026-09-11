@@ -20,24 +20,19 @@ rec {
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
 
-  isSubjectKind = kind:
-    kind == "subject" || kind == "subjects" || kind == "listSubject";
-
-  # A core subject parameter's references as a list.
+  # Core subject kinds carry step references; `subjects` carries a list.
   subjectRefs = kind: value:
     if kind == "subjects" then
       value
-    else if isSubjectKind kind then
+    else if kind == "subject" || kind == "listSubject" then
       [ value ]
     else
       [ ];
 
-  # Applies `f` to a core subject parameter's reference(s); other kinds
-  # pass through unchanged.
   mapSubjectRefs = f: kind: value:
     if kind == "subjects" then
       builtins.map f value
-    else if isSubjectKind kind then
+    else if kind == "subject" || kind == "listSubject" then
       f value
     else
       value;
@@ -52,27 +47,18 @@ rec {
       }
     );
 
-  # ---- Contract / construction tables --------------------------------
-  #
-  # The core schema is the single authority for parameter names, order,
-  # kind, shape, domain, default, and requiredness.  `templateMeta` is
-  # its one reader: it checks the ABI, validates each template's
-  # bindings against the core, and derives the construction tables.
+  # The core schema is the single authority for parameter names, order, kinds,
+  # shapes, defaults, and requiredness; `templateMeta` is its one reader.
   templateMeta =
     { templates, schema }:
     let
-      schemaFormat = "pointy-argument-schema";
-      schemaVersion = 1;
-      _abi =
-        if (schema.format or (throw "pointy core schema: missing `format`")) != schemaFormat then
-          throw "pointy core schema: unsupported format `${schema.format}` (expected `${schemaFormat}`)"
-        else if (schema.version or (throw "pointy core schema: missing `version`")) != schemaVersion then
-          throw "pointy core schema: unsupported version `${toString schema.version}` (expected ${toString schemaVersion})"
+      interfaces =
+        if (schema.format or (throw "pointy core schema: missing `format`")) != "pointy-argument-schema" then
+          throw "pointy core schema: unsupported format `${schema.format}` (expected pointy-argument-schema)"
+        else if (schema.version or (throw "pointy core schema: missing `version`")) != 1 then
+          throw "pointy core schema: unsupported version `${toString schema.version}` (expected 1)"
         else
-          null;
-      interfaces = builtins.seq _abi (
-        schema.interfaces or (throw "pointy core schema: missing `interfaces` table")
-      );
+          schema.interfaces or (throw "pointy core schema: missing `interfaces` table");
     in
     builtins.mapAttrs (
       name: template:
@@ -123,7 +109,6 @@ rec {
             value = p.kind;
           }) params
         );
-        # Core defaults, in schema order.
         defaults = builtins.listToAttrs (
           builtins.map (p: {
             name = p.param;
@@ -207,10 +192,8 @@ rec {
           templateKind ? derivation
           && (templateKind.derivation.withSrcFiles or false)
           && builtins.pathExists srcDir;
-      in
-      let
+        # Absent producer lists are the canonical empty acquisition.
         resolvedArgs =
-          # The core's canonical empty acquisition is a plain empty array.
           resolve
           // builtins.listToAttrs (
             builtins.map (p: {
@@ -245,7 +228,6 @@ rec {
             {
               dontUnpack = true;
             };
-        # Templates read compile args as cfg.<param>.
         cfg = compiledTemplates.${type}.build {
           args = normalizedArgs;
           public = result;

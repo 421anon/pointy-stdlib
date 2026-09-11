@@ -1,68 +1,68 @@
-# Host configuration is in the README.
 { pointyLib, pointy-lang }:
 top:
 let
   lib = top.lib;
   sel = top.config.pointy.semantic;
+  cfg = top.config.pointy;
 in
 {
   options.pointy.semantic = {
     language = lib.mkOption {
       type = lib.types.raw;
       default = pointy-lang;
-      description = "The pointy language flake (semantic core + scanner bundles). Defaults to this stdlib flake's own `pointy-lang` input; pass a fork or a separately pinned flake to override.";
+      description = "The pointy language flake (compiler and scanner bundles).";
     };
     pkgs = lib.mkOption {
       type = lib.types.raw;
-      description = "The pkgs to build raw steps and sources with. Required.";
+      description = "The one pkgs for raw steps, entry sources, and certificates.";
     };
     source = lib.mkOption {
       type = lib.types.raw;
-      description = "Entry program source (conventionally main.pointy). Required.";
+      description = "Entry program source (conventionally main.pointy).";
     };
     modules = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = {
         csv = "ext/csv.pointy";
       };
-      description = "Logical module name -> source-relative path the entry program imports it at. The csv observation module is pre-enrolled by default; hosts extend or override per key.";
+      description = "Logical module name -> source-relative import path; csv is pre-enrolled.";
     };
     scanners = lib.mkOption {
       type = lib.types.attrsOf lib.types.attrs;
       default = {
         csv = { };
       };
-      description = "Observation-interface name -> optional bundle overrides ({ interface; program }) over the language flake's pointyScanners.<system>.<name>. The csv bundle is pre-enrolled with its stdlib interface variant by default; hosts extend or override per key.";
+      description = "Observation-interface name -> { interface; program } overrides; csv is pre-enrolled.";
     };
     result = lib.mkOption {
       internal = true;
       type = lib.types.attrs;
       default = { };
-      description = "Computed semantic kernel; merged into flake.pointy by the default module.";
+      description = "Semantic kernel: contract tables, raw steps, and per-record results.";
     };
   };
 
-  config = (
+  config.pointy.semantic = (
     let
       # mkFlake fixes the system list.
       system = "x86_64-linux";
       pkgs = sel.pkgs;
       langLib = sel.language.lib.${system};
 
-      resolveBundle = name: spec:
+      scanners = builtins.mapAttrs (
+        name: spec:
         let
-          bundle = sel.language.pointyScanners.${system}.${name} or
-            (throw "pointy.semantic: no scanner bundle `${name}' in the language flake's pointyScanners.${system}");
+          bundle = sel.language.pointyScanners.${system}.${name}
+            or (throw "pointy.semantic: no scanner bundle `${name}' in pointyScanners.${system}");
         in
         {
           interface = spec.interface or bundle.interface;
           program = spec.program or bundle.program;
-        };
+        }
+      ) sel.scanners;
 
-      resolvedScanners = builtins.mapAttrs resolveBundle sel.scanners;
-
-      templates = top.config.pointy.templates;
-      records = top.config.pointy.stepDefs;
+      templates = cfg.templates;
+      records = cfg.stepDefs;
       modulesFile = builtins.toFile "pointy-modules.json" (builtins.toJSON sel.modules);
       contractSchema = langLib.mkArgumentSchema {
         source = entrySource;
@@ -70,25 +70,16 @@ in
       };
       coreSchema = builtins.fromJSON (builtins.readFile (builtins.toString contractSchema));
       metas = pointyLib.templateMeta { inherit templates; schema = coreSchema; };
+      steps = pointyLib.evalSteps (cfg // { inherit pkgs metas; });
 
-      # The same eval the default module publishes as packages.pointy.steps.
-      steps = pointyLib.evalSteps (top.config.pointy // { inherit pkgs metas; });
-
-      # ---- Semantic sources --------------------------------------------
-      #
-      # entryTree assembles the source-relative layout the entry
-      # program's imports rely on.  Copied, not symlinked: the core's
-      # containment audit rejects symlink escapes.
-      moduleSources = builtins.mapAttrs (name: rel:
-        {
-          inherit rel;
-          src = resolvedScanners.${name}.interface
-            or (throw "pointy.semantic: module `${name}' has no same-named scanner bundle to source its interface from");
-        }
-      ) sel.modules;
-
+      # The source-relative layout the entry program's imports rely on.
+      # Copied, not symlinked: the core's containment audit rejects escapes.
+      moduleSources = builtins.mapAttrs (name: rel: {
+        inherit rel;
+        src = scanners.${name}.interface
+          or (throw "pointy.semantic: module `${name}' has no same-named scanner bundle");
+      }) sel.modules;
       moduleList = lib.imap0 (i: m: m // { idx = i; }) (builtins.attrValues moduleSources);
-
       entryTree =
         pkgs.runCommand "pointy-entry-sources"
           (builtins.listToAttrs (
@@ -112,87 +103,76 @@ in
       entrySource = "${entryTree}/main.pointy";
       entryModules = builtins.mapAttrs (_: m: "${entryTree}/${m.rel}") moduleSources;
 
-      # The certifier coverage gate requires the interface path as a
-      # direct inputSrc.
+      # The certifier coverage gate wants each interface as a direct inputSrc.
       scannerBundles = builtins.mapAttrs (_: b: {
         interface = builtins.path {
           path = b.interface;
           name = "pointy-scanner-interface";
         };
         program = b.program;
-      }) resolvedScanners;
+      }) scanners;
 
-      sharedModel = langLib.mkContractModel {
-        source = entrySource;
-        modules = entryModules;
-      };
+      # Producer handle lookup; a rejected producer names both ends.
+      handleOf =
+        consumerId: ref:
+        let
+          producerId = builtins.toString ref.meta.pointy.id;
+        in
+        handles.${producerId}
+          or (throw "pointy.semantic: step `${consumerId}' references unresolvable step `${producerId}'");
 
-      # ---- Classification + handle re-wrap ------------------------------
-      handleOfStep = value:
-        handles.${builtins.toString value.meta.pointy.id} or (throw "pointy.semantic: resolved step reference is missing meta.pointy.id");
-      wrapHandles = pointyLib.mapSubjectRefs handleOfStep;
-
-      # ---- Per-record handles --------------------------------------------
-      handleResult = id: rec_:
+      handleResult =
+        id: rec_:
         let
           meta = metas.${rec_.type};
           rawStep = steps.${id};
-          resolvedEv = builtins.tryEval rawStep.drvPath;
         in
-        if !resolvedEv.success then {
-          __unresolvable = true;
-          inherit id;
-          type = rec_.type;
-          reason = "the raw pipeline rejects this record before semantic resolution (missing/invalid args, an unresolvable producer dependency, or a template assertion); see .#pointy.steps.\"${id}\"";
-        }
-        else
-          let
-            resolvedHandles = builtins.mapAttrs (argName: value:
-              if meta.paramKinds ? ${argName} then
-                wrapHandles meta.paramKinds.${argName} value
-              else
-                value
-            ) rawStep.meta.pointy.args;
-            callArgs = meta.defaults // resolvedHandles // { inherit id; };
-          in
+        if (builtins.tryEval rawStep.drvPath).success then
           (langLib.mkSidecar {
             source = entrySource;
             modules = entryModules;
             interface = meta.interface;
             output = meta.output;
             arguments = builtins.intersectAttrs meta.paramKinds;
-            construct = _args: rawStep;
+            construct = _: rawStep;
             scanners = scannerBundles;
             key = id;
-          }) callArgs;
+          }) (meta.defaults
+            // builtins.mapAttrs (
+              argName: value:
+              if meta.paramKinds ? ${argName} then
+                pointyLib.mapSubjectRefs (handleOf id) meta.paramKinds.${argName} value
+              else
+                value
+            ) rawStep.meta.pointy.args
+            // { inherit id; })
+        else
+          {
+            __unresolvable = true;
+          };
 
-      handles = builtins.mapAttrs handleResult records;
-
-      resolvable = lib.filterAttrs (_: h: !(h.__unresolvable or false)) handles;
-      unresolvable = builtins.attrNames (lib.filterAttrs (_: h: h.__unresolvable or false) handles);
-
-      resolvableMap = pick: builtins.mapAttrs (_: pick) resolvable;
-
-      transport = {
-        applications = langLib.pointyApplicationsDoc {
-          name = "pointy-applications.json";
-          apps = resolvableMap (h: h.pointyInternals.entry);
-        };
-        modules = modulesFile;
-        entryTree = entryTree;
-      };
-
-      # ---- Presenter metadata --------------------------------------------
-      checked = resolvableMap (h: h.target);
-      certificates = resolvableMap (h: h.certificate);
+      all = builtins.mapAttrs handleResult records;
+      rejected = lib.filterAttrs (_: h: h.__unresolvable or false) all;
+      handles = builtins.removeAttrs all (builtins.attrNames rejected);
     in
     {
-      # Merged into flake.pointy by the default module.
-      pointy.semantic.result = {
-        inherit unresolvable transport;
-        inherit checked certificates;
-        inherit contractSchema;
-        contractModel = sharedModel;
+      result = {
+        inherit contractSchema metas steps;
+        contractModel = langLib.mkContractModel {
+          source = entrySource;
+          modules = entryModules;
+        };
+        unresolvable = builtins.attrNames rejected;
+        checked = builtins.mapAttrs (_: h: h.target) handles;
+        certificates = builtins.mapAttrs (_: h: h.certificate) handles;
+        transport = {
+          applications = langLib.pointyApplicationsDoc {
+            name = "pointy-applications.json";
+            apps = builtins.mapAttrs (_: h: h.pointyInternals.entry) handles;
+          };
+          modules = modulesFile;
+          entryTree = entryTree;
+        };
       };
     }
   );

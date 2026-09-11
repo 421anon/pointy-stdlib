@@ -1,4 +1,4 @@
-# Renders the notebook's stepConfig document from the contract tables
+# Renders the notebook's stepConfig document from the core tables
 # (`templateMeta`) plus each template's presentation bindings.
 let
   baseKeys = [ "description" "displayName" ];
@@ -30,7 +30,7 @@ let
     if unknown == [ ] then
       null
     else
-      throw "pointy template: unknown presentation override(s) at ${path}: ${builtins.concatStringsSep ", " unknown} (allowed: ${builtins.concatStringsSep ", " (baseKeys ++ allowedKeys kind shape)})";
+      throw "pointy template: unknown presentation override(s) at ${path}: ${builtins.concatStringsSep ", " unknown}";
 
   stepAttrs = b:
     (if b ? allowedTypes then { inherit (b) allowedTypes; } else { })
@@ -59,9 +59,7 @@ let
           else if shape.scalar == "integer" then
             { int = stringAttrs b; }
           else
-            # The notebook has no wire type for decimal/boolean scalars;
-            # the core requires them as JSON bool/decimal.
-            throw "pointy core schema: scalar `${shape.scalar}` has no notebook wire type (`text`/`integer` render); add a UI wire type or omit the parameter from stepConfig"
+            throw "pointy core schema: scalar `${shape.scalar}` has no notebook wire type"
         else if shape.kind == "choice" then
           {
             enum = shape.values;
@@ -92,25 +90,17 @@ let
             );
           }
         else
-          throw "pointy core schema: unrenderable shape kind `${shape.kind}` (scalar/choice/list/record render in stepConfig)";
+          throw "pointy core schema: unrenderable shape kind `${shape.kind}`";
     in
     builtins.seq (rejectUnknown path kind shape b) rendered;
 
   argType = path: kind: shape: node:
-    let
-      b = if node == null then { } else node;
-    in
     {
-      description = b.description or "";
-      displayName = b.displayName or null;
-      type = wireType path kind shape b;
+      description = node.description or "";
+      displayName = node.displayName or null;
+      type = wireType path kind shape node;
     };
 
-  semanticArg = path: param: node:
-    argType path param.kind param.shape node
-    // (if param.default != null then { inherit (param) default; } else { });
-
-  # ---- full merged stepConfig document --------------------------------
   renderStepConfig = { templates, metas }:
     let
       templateNames = builtins.attrNames templates;
@@ -119,8 +109,8 @@ let
         let
           meta = metas.${name};
           bindings = tpl.bindings or { };
-          # Presentation-only check: a host may narrow a subject's
-          # template domain, never name a template that does not exist.
+          # A binding may narrow a subject's template domain, never name a
+          # template that does not exist.
           problems = builtins.concatLists (
             builtins.map
               (p:
@@ -142,7 +132,8 @@ let
           ) (builtins.listToAttrs (
             builtins.map (p: {
               name = p.param;
-              value = semanticArg (meta.interface + "." + p.param) p (bindings.${p.param} or { });
+              value = argType (meta.interface + "." + p.param) p.kind p.shape (bindings.${p.param} or { })
+                // (if p.default != null then { inherit (p) default; } else { });
             }) meta.params
           ));
         in

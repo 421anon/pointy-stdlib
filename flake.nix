@@ -50,10 +50,8 @@
             let
               cfg = top.config.pointy;
               semantic = cfg.semantic.result;
-              metas = pointyLib.templateMeta {
-                inherit (cfg) templates;
-                schema = builtins.fromJSON (builtins.readFile (toString semantic.contractSchema));
-              };
+              metas = semantic.metas;
+              pkgs = cfg.semantic.pkgs;
               fakeDrv = {
                 type = "derivation";
                 name = "";
@@ -63,7 +61,6 @@
               flake.pointy =
                 with pointyLib;
                 {
-                  # `nix eval --json '.#pointy.stepConfig'` yields the document.
                   stepConfig = renderStepConfig {
                     inherit (cfg) templates;
                     inherit metas;
@@ -73,27 +70,28 @@
                   stepDefs = evalStepDefs cfg;
                   srcFiles = cfg.srcFiles;
                   dependencies = evalDependencies (cfg // { inherit metas; });
-                }
-                // semantic;
+                  inherit (semantic)
+                    contractSchema
+                    contractModel
+                    checked
+                    certificates
+                    transport
+                    unresolvable
+                    ;
+                };
               perSystem =
-                { pkgs, ... }:
+                _:
                 {
-                  config = {
-                    packages = {
-                      pointy =
-                        with pointyLib;
-                        fakeDrv
-                        // {
-                          steps = evalSteps <| cfg // {
-                            inherit pkgs metas;
-                          };
-                          projectOutPaths = evalProjectOutPaths <| cfg // {
-                            inherit pkgs metas;
-                          };
-                          autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
-                        };
+                  config.packages.pointy =
+                    with pointyLib;
+                    fakeDrv
+                    // {
+                      inherit (semantic) steps;
+                      projectOutPaths = evalProjectOutPaths <| cfg // {
+                        inherit pkgs metas;
+                      };
+                      autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
                     };
-                  };
                 };
             };
         };
