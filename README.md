@@ -14,28 +14,28 @@ pointyLib.mkFlake { inherit inputs; } ({ inputs, ... }: {
     srcFiles = ./srcFiles;
 
     semantic = {
-      # One pkgs for raw steps, entry sources, and certificates.
+      # One pkgs for the raw steps and the entry sources.
       pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
       source = ./main.pointy;
-      # language = ...;                  # defaults to this stdlib's pointy-lang input
-      # modules.csv = "ext/csv.pointy";  # csv is pre-enrolled
-      # scanners.csv = { };              # csv is pre-enrolled
+      # language = ...;                     # defaults to this stdlib's pointy-lang input
+      # extensions.csv = { };               # source and path default to ext/csv.pointy
+      # extensions.mine = { source = ./ext/mine.pointy; path = "ext/mine.pointy"; };
     };
   };
 });
 ```
 
-`semantic.language` must expose `lib.<system>`, `packages.<system>.pointy`, and `pointyScanners.<system>`. `modules` maps logical module names to source-relative import paths; each interface is sourced from the same-named scanner bundle.
+`semantic.language` must expose `lib.forSystem` and `pointyExtensions.<system>`: each logical extension is the same-named `pointyExtensions` document (a `source` plus optional `observer`), enrolled at its source-relative `path`.
+
+The language integration is the compiler's `argumentSchema`: the library hands over the program and its extension sources, and the language builds the import layout, runs the core's source pass (`pointy-certify --mode schema`, IFD at eval — an invalid source fails evaluation with the core's located diagnostic) and returns the parsed document. `templateMeta` merges that document with the host's `bindings`, and `evalSteps` builds the raw steps against its parameter table. Per-record certification is out of scope: nothing in the library builds a certificate derivation.
 
 ## Flake outputs
 
 - `#pointy.stepConfig` — per-template UI descriptors: the pure merge of the core argument schema (built by `pointy-certify --mode schema` over the host's own sources) with the host's presentation `bindings`. The core owns names, order, kinds, shapes, defaults, and requiredness; bindings own widgets, dropdowns, and labels. Evaluation fails on a binding that names no core parameter, an `allowedTypes` value that names no template, or a presentation override the core shape rejects. `nix eval --json '.#pointy.stepConfig'` yields the document the backend serves.
-- `#pointy.contractSchema` — the schema derivation (IFD at eval); `#pointy.contractModel` — the shared model over the entry sources.
-- `#pointy.checked` / `#pointy.certificates` — per record id: the certificate target (`pointy build` / `pointy verify` input) and the certificate.
-- `#pointy.unresolvable` — ids the raw pipeline rejects; they are absent from `checked` and `certificates`.
-- `#pointy.transport` — the canonical applications document, the enrolled module map, and the assembled entry-source tree.
 - `#pointy.stepDefs` / `#pointy.projects` / `#pointy.srcFiles` / `#pointy.dependencies`.
-- per-system `packages.pointy.steps` / `projectOutPaths` / `autocomplete`.
+- `#pointy.steps` / `#pointy.projectOutPaths` / `#pointy.autocomplete` — the raw buildables, the per-project output paths, and the template autocomplete hooks.
+
+Each output above is read by the notebook backend; anything it does not read is not published. `semantic.result` carries only what the default module projects (the core tables and the raw steps).
 
 Records and every host-side argument map are keyed by the core schema's `parameter` name. Templates declare `contract.interface` (and optionally `contract.output`, default `"out"`) plus presentation `bindings`; `compile` receives the resolved args.
 

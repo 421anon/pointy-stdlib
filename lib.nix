@@ -48,17 +48,12 @@ rec {
     );
 
   # The core schema is the single authority for parameter names, order, kinds,
-  # shapes, defaults, and requiredness; `templateMeta` is its one reader.
+  # shapes, defaults, and requiredness; `templateMeta` is its one reader.  The
+  # language's `argumentSchema` has already validated the document.
   templateMeta =
     { templates, schema }:
     let
-      interfaces =
-        if (schema.format or (throw "pointy core schema: missing `format`")) != "pointy-argument-schema" then
-          throw "pointy core schema: unsupported format `${schema.format}` (expected pointy-argument-schema)"
-        else if (schema.version or (throw "pointy core schema: missing `version`")) != 1 then
-          throw "pointy core schema: unsupported version `${toString schema.version}` (expected 1)"
-        else
-          schema.interfaces or (throw "pointy core schema: missing `interfaces` table");
+      interfaces = schema.interfaces;
     in
     builtins.mapAttrs (
       name: template:
@@ -337,7 +332,7 @@ rec {
 
   evalProjectOutPaths =
     args@{
-      pkgs,
+      steps,
       projects,
       stepDefs,
       templates,
@@ -345,7 +340,6 @@ rec {
     }:
     let
       projects = evalProjects args;
-      steps = evalSteps args;
     in
     builtins.mapAttrs (
       _: proj:

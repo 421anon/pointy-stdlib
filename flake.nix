@@ -45,10 +45,6 @@
               semantic = cfg.semantic.result;
               metas = semantic.metas;
               pkgs = cfg.semantic.pkgs;
-              fakeDrv = {
-                type = "derivation";
-                name = "";
-              };
             in
             {
               flake.pointy =
@@ -63,28 +59,12 @@
                   stepDefs = evalStepDefs cfg;
                   srcFiles = cfg.srcFiles;
                   dependencies = evalDependencies (cfg // { inherit metas; });
-                  inherit (semantic)
-                    contractSchema
-                    contractModel
-                    checked
-                    certificates
-                    transport
-                    unresolvable
-                    ;
-                };
-              perSystem =
-                _:
-                {
-                  config.packages.pointy =
-                    with pointyLib;
-                    fakeDrv
-                    // {
-                      inherit (semantic) steps;
-                      projectOutPaths = evalProjectOutPaths <| cfg // {
-                        inherit pkgs metas;
-                      };
-                      autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
-                    };
+                  inherit (semantic) steps;
+                  projectOutPaths = evalProjectOutPaths <| cfg // {
+                    inherit pkgs metas;
+                    inherit (semantic) steps;
+                  };
+                  autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
                 };
             };
         };
