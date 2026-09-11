@@ -18,6 +18,9 @@ let
       [ ]
     else if isSubject shape then
       [ "allowedTypes" "quickCreate" ]
+    else if shape.kind == "scalar" && shape.scalar == "boolean" then
+      # A checkbox carries no presentation knobs.
+      [ ]
     else
       {
         scalar = [ "display" "autocomplete" ];
@@ -64,6 +67,8 @@ let
             { string = stringAttrs b; }
           else if shape.scalar == "integer" then
             { int = stringAttrs b; }
+          else if shape.scalar == "boolean" then
+            { bool = { }; }
           else
             throw "pointy core schema: scalar `${shape.scalar}` has no notebook wire type"
         else if shape.kind == "choice" then
