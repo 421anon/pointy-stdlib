@@ -136,6 +136,18 @@ in
         type = nullOr str;
         default = null;
       };
+      reviewedRevision = mkOption {
+        type = nullOr str;
+        default = null;
+      };
+      reviewedBy = mkOption {
+        type = str;
+        default = "";
+      };
+      reviewComments = mkOption {
+        type = str;
+        default = "";
+      };
       args = mkOption { type = attrs; };
       requirements = mkOption {
         type = nullOr requirementsType;
