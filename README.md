@@ -14,11 +14,9 @@ pointyLib.mkFlake { inherit inputs; } ({ inputs, ... }: {
     srcFiles = ./srcFiles;
 
     semantic = {
-      # One pkgs for the raw steps and the entry sources.
       pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
       source = ./main.pointy;
       # language = ...;                     # defaults to this stdlib's pointy-lang input
-      # extensions.csv = { };               # source and path default to ext/csv.pointy
       # extensions.mine = { source = ./ext/mine.pointy; path = "ext/mine.pointy"; };
     };
   };

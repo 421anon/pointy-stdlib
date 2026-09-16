@@ -11,7 +11,6 @@ let
     && (shape.kind == "subject"
         || (shape.kind == "array" && (shape.element.kind or null) == "subject"));
 
-  # Presentation keys the core shape accepts.
   allowedKeys =
     shape:
     if shape == null then
@@ -50,8 +49,7 @@ let
     // (if b ? autocomplete then { inherit (b) autocomplete; } else { });
 
   # core shape -> notebook wire type.  An artifact position renders as the
-  # notebook's step descriptor (the subject leaf, or its ordered list);
-  # every other shape renders by its wire form.
+  # notebook's step descriptor; every other shape renders by its wire form.
   wireType = path: shape: node:
     let
       b = if node == null then { } else node;
@@ -120,8 +118,7 @@ let
         let
           meta = metas.${name};
           bindings = tpl.bindings or { };
-          # A binding may narrow a subject's template domain, never name a
-          # template that does not exist.
+          # allowedTypes may narrow a subject's template domain.
           problems = builtins.concatLists (
             builtins.map
               (p:

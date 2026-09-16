@@ -58,8 +58,6 @@ in
       lang = sel.language.lib.forSystem { inherit system pkgs; };
       templates = cfg.templates;
 
-      # Each logical extension is its own source document; the language
-      # copies them into the import layout at their source-relative paths.
       extensions = builtins.mapAttrs (
         name: spec:
         let

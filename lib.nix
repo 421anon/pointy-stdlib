@@ -20,8 +20,6 @@ rec {
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
 
-  # A producer parameter's acquisition arity: one reference, or an
-  # ordered family of references whose empty form is legal.
   subjectRefs = arity: value: if arity == "many" then value else [ value ];
 
   mapSubjectRefs = f: arity: value:
@@ -37,15 +35,10 @@ rec {
       }
     );
 
-  # The core schema is the single authority for parameter names, order, shapes,
-  # defaults, and requiredness; `templateMeta` is its one reader.  The
-  # language's `argumentSchema` has already validated the document.
   templateMeta =
     { templates, schema }:
     let
-      # This stdlib reads argument-schema version 3 (one recursive shape
-      # per parameter); any other version fails here, never as a
-      # misrendered stepConfig.
+      # Fail on any other version here, never as a misrendered stepConfig.
       interfaces =
         if schema.version or 0 == 3 then
           schema.interfaces
@@ -203,7 +196,6 @@ rec {
           templateKind ? derivation
           && (templateKind.derivation.withSrcFiles or false)
           && builtins.pathExists srcDir;
-        # Absent producer lists are the canonical empty acquisition.
         resolvedArgs =
           resolve
           // builtins.listToAttrs (
