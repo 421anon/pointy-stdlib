@@ -16,14 +16,12 @@ pointyLib.mkFlake { inherit inputs; } ({ inputs, ... }: {
     semantic = {
       pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
       source = ./main.pointy;
-      # language = ...;                     # defaults to this stdlib's pointy-lang input
-      # extensions.mine = { source = ./ext/mine.pointy; path = "ext/mine.pointy"; };
     };
   };
 });
 ```
 
-`semantic.language` must expose `lib.forSystem` and `pointyExtensions.<system>`: each logical extension is the same-named `pointyExtensions` document (a `source` plus optional `observer`), enrolled at its source-relative `path`.
+`semantic` takes the two things the library cannot decide: the entry program, and the one `pkgs` the compiler, the raw steps, and the entry sources share. The language integration is this stdlib's own opinion: this flake's `pointy-lang` input, the extension set that language ships (`pointyExtensions.<system>`, enrolled at the language's import paths), and the one system `mkFlake` fixes.
 
 One `nixpkgs`, and the compiler owns the choice: this flake's `nixpkgs` follows `pointy-lang/nixpkgs`, so the compiler is built with the rev the language's own lock tests against. A host that wants the library and its raw steps on its own nixpkgs sets `pointy-stdlib.inputs.nixpkgs.follows = "nixpkgs"` (the compiler keeps the language's pin unless the host also follows into `pointy-lang`).
 
@@ -35,7 +33,7 @@ The language integration is the compiler's `argumentSchema`: the library hands o
 - `#pointy.stepDefs` / `#pointy.projects` / `#pointy.srcFiles` / `#pointy.dependencies`.
 - `#pointy.steps` / `#pointy.projectOutPaths` / `#pointy.autocomplete` — the raw buildables, the per-project output paths, and the template autocomplete hooks.
 
-Each output above is read by the notebook backend; anything it does not read is not published. `semantic.result` carries only what the default module projects (the core tables and the raw steps).
+Each output above is read by the notebook backend; anything it does not read is not published.
 
 Records and every host-side argument map are keyed by the core schema's `parameter` name. Templates declare `contract.interface` (and optionally `contract.output`, default `"out"`) plus presentation `bindings`; `compile` receives the resolved args.
 

@@ -17,7 +17,7 @@
     inputs@{ ... }:
     let
       pointyLib = import ./lib.nix inputs;
-      semanticModule = import ./semantic.nix {
+      semantic = import ./semantic.nix {
         inherit pointyLib;
         inherit (inputs) pointy-lang;
       };
@@ -25,49 +25,55 @@
     {
       lib = pointyLib.api;
 
-      flakeModules = {
-        semantic = semanticModule;
-        default = top: {
-          options.pointy = {
-            stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.stepDef; };
-            templates = top.lib.mkOption { type = top.lib.types.attrs; };
-            presets = top.lib.mkOption {
-              type = top.lib.types.attrsOf pointyLib.types.pointy.preset;
-              default = { };
-            };
-            projects = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.project; };
-            srcFiles = top.lib.mkOption { type = top.lib.types.raw; };
+      flakeModules.default = top: {
+        options.pointy = {
+          stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.stepDef; };
+          templates = top.lib.mkOption { type = top.lib.types.attrs; };
+          presets = top.lib.mkOption {
+            type = top.lib.types.attrsOf pointyLib.types.pointy.preset;
+            default = { };
           };
-
-          config =
-            let
-              cfg = top.config.pointy;
-              semantic = cfg.semantic.result;
-              metas = semantic.metas;
-              pkgs = cfg.semantic.pkgs;
-            in
-            {
-              flake.pointy =
-                with pointyLib;
-                {
-                  stepConfig = renderStepConfig {
-                    inherit (cfg) templates;
-                    inherit metas;
-                  };
-                  presets = evalPresets cfg;
-                  projects = evalProjects cfg;
-                  stepDefs = evalStepDefs cfg;
-                  srcFiles = cfg.srcFiles;
-                  dependencies = evalDependencies (cfg // { inherit metas; });
-                  inherit (semantic) steps;
-                  projectOutPaths = evalProjectOutPaths <| cfg // {
-                    inherit pkgs metas;
-                    inherit (semantic) steps;
-                  };
-                  autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
-                };
+          projects = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.project; };
+          srcFiles = top.lib.mkOption { type = top.lib.types.raw; };
+          semantic = {
+            pkgs = top.lib.mkOption {
+              type = top.lib.types.raw;
+              description = "The one pkgs for the raw steps and the entry sources.";
             };
+            source = top.lib.mkOption {
+              type = top.lib.types.raw;
+              description = "Entry program source (conventionally main.pointy).";
+            };
+          };
         };
+
+        config =
+          let
+            cfg = top.config.pointy;
+            kernel = semantic {
+              inherit cfg;
+              inherit (cfg.semantic) pkgs source;
+            };
+            inherit (kernel) metas steps;
+          in
+          {
+            flake.pointy =
+              with pointyLib;
+              {
+                stepConfig = renderStepConfig {
+                  inherit (cfg) templates;
+                  inherit metas;
+                };
+                presets = evalPresets cfg;
+                projects = evalProjects cfg;
+                stepDefs = evalStepDefs cfg;
+                srcFiles = cfg.srcFiles;
+                dependencies = evalDependencies (cfg // { inherit metas; });
+                inherit steps;
+                projectOutPaths = evalProjectOutPaths (cfg // { inherit steps; });
+                autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
+              };
+          };
       };
     };
 }

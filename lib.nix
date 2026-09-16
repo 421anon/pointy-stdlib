@@ -474,7 +474,6 @@ rec {
     flake-parts.lib.mkFlake (withDefaultNixpkgs args) {
       imports = [
         self.flakeModules.default
-        self.flakeModules.semantic
         userModule
       ];
 
