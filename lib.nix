@@ -7,7 +7,7 @@
 rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
-  renderStepConfig = (import ./lib/step-config.nix { inherit (nixpkgs) lib; }).renderStepConfig;
+  renderStepConfig = (import ./lib/step-config.nix { inherit (nixpkgs) lib; inherit arityOf; }).renderStepConfig;
 
   api = {
     inherit
@@ -33,6 +33,16 @@ rec {
       }
     );
 
+  # A producer parameter is a subject leaf or an array of them; every
+  # other shape is wire data.
+  arityOf =
+    shape:
+    {
+      subject = "one";
+      array = { subject = "many"; }.${shape.element.kind or "data"} or null;
+    }
+    .${shape.kind or "data"} or null;
+
   templateMeta =
     { templates, schema }:
     let
@@ -42,16 +52,6 @@ rec {
           schema.version or 0 == 3
           || throw "pointy templateMeta: the language provides argument-schema version ${builtins.toString (schema.version or 0)}; this stdlib reads version 3 (shape)";
         schema.interfaces;
-
-      # A producer parameter is a subject leaf or an array of them; every
-      # other shape is wire data.
-      arityOf =
-        shape:
-        {
-          subject = "one";
-          array = { subject = "many"; }.${shape.element.kind or "data"} or null;
-        }
-        .${shape.kind or "data"} or null;
     in
     builtins.mapAttrs (
       name: template:
@@ -82,18 +82,7 @@ rec {
           }
         ) (iface.parameters or [ ]);
         paramNames = builtins.map (p: p.param) params;
-        unknownBindings = builtins.filter (
-          n: !builtins.elem n paramNames
-        ) (builtins.attrNames (template.bindings or { }));
       in
-      assert
-        unknownBindings == [ ]
-        || throw (
-          "pointy.template `${name}`: "
-          + nixpkgs.lib.concatStringsSep "; " (
-            builtins.map (n: "unknown binding `${n}': not a core parameter of `${interface}'") unknownBindings
-          )
-        );
       {
         inherit interface params;
         output = contract.output or "out";

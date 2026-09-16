@@ -1,30 +1,24 @@
 # Renders the notebook's stepConfig document from the core tables
 # (`templateMeta`) plus each template's presentation bindings.
-{ lib }:
+{ lib, arityOf }:
 let
   baseKeys = [ "description" "displayName" ];
 
   # An artifact position: the subject leaf, or the ordered list of
   # subject leaves whose empty form is legal.
-  isSubject =
-    shape:
-    shape != null
-    && (shape.kind == "subject"
-        || (shape.kind == "array" && (shape.element.kind or null) == "subject"));
+  isSubject = shape: arityOf shape != null;
 
   allowedKeys =
     shape:
-    if isSubject shape then
-      [ "allowedTypes" "quickCreate" ]
-    else
-      {
-        # A checkbox carries no presentation knobs.
-        scalar = { boolean = [ ]; }.${shape.scalar or "data"} or [ "display" "autocomplete" ];
-        choice = [ "enumDisplayNames" ];
-        array = [ "list" ];
-        record = [ "record" ];
-      }
-      .${shape.kind or "data"} or [ ];
+    {
+      # A checkbox carries no presentation knobs.
+      scalar = { boolean = [ ]; }.${shape.scalar or "data"} or [ "display" "autocomplete" ];
+      subject = [ "allowedTypes" "quickCreate" ];
+      choice = [ "enumDisplayNames" ];
+      array = [ "list" ];
+      record = [ "record" ];
+    }
+    .${shape.kind or "data"} or [ ];
 
   stepAttrs = b:
     lib.optionalAttrs (b ? allowedTypes) { inherit (b) allowedTypes; }
@@ -46,11 +40,7 @@ let
       ) (builtins.attrNames b);
       wire = {
         subject = { step = stepAttrs b; };
-        array =
-          { subject = { list = { step = stepAttrs b; }; }; }
-          .${shape.element.kind or "data"} or {
-            list = wireType (path + ".list") shape.element (b.list or { });
-          };
+        array = { list = wireType (path + ".list") shape.element (b.list or { }); };
         scalar = {
           text = { string = stringAttrs b; };
           integer = { int = stringAttrs b; };
@@ -106,16 +96,35 @@ let
         let
           meta = metas.${name};
           bindings = tpl.bindings or { };
-          # A binding may narrow a subject's template domain.
+          paramNames = builtins.map (p: p.param) meta.params;
+          unknownBindings = builtins.filter (n: !builtins.elem n paramNames) (
+            builtins.attrNames bindings
+          );
+          # A binding may narrow a subject's template domain; a list keeps its
+          # leaves' knobs under `list`.
+          narrows =
+            p:
+            if arityOf p.shape == "many" then
+              (bindings.${p.param} or { }).list or { }
+            else
+              bindings.${p.param} or { };
           problems = builtins.concatMap
             (p:
               builtins.map
                 (t: "allowedTypes value `${t}' names no template")
                 (builtins.filter
                   (t: !builtins.elem t templateNames)
-                  ((bindings.${p.param} or { }).allowedTypes or [ ])))
+                  ((narrows p).allowedTypes or [ ])))
             (builtins.filter (p: isSubject p.shape) meta.params);
           args =
+            assert
+              unknownBindings == [ ]
+              || throw (
+                "pointy.template `${name}`: "
+                + lib.concatStringsSep "; " (
+                  builtins.map (n: "unknown binding `${n}': not a core parameter of `${meta.interface}'") unknownBindings
+                )
+              );
             assert
               problems == [ ]
               || throw ("pointy template `${name}`: " + builtins.concatStringsSep "; " problems);
