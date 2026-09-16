@@ -7,7 +7,7 @@
 rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
-  renderStepConfig = (import ./lib/step-config.nix).renderStepConfig;
+  renderStepConfig = (import ./lib/step-config.nix { inherit (nixpkgs) lib; }).renderStepConfig;
 
   api = {
     inherit
@@ -19,8 +19,6 @@ rec {
   };
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
-
-  subjectRefs = arity: value: if arity == "many" then value else [ value ];
 
   mapSubjectRefs = f: arity: value:
     if arity == "many" then builtins.map f value else f value;
@@ -40,26 +38,20 @@ rec {
     let
       # Fail on any other version here, never as a misrendered stepConfig.
       interfaces =
-        if schema.version or 0 == 3 then
-          schema.interfaces
-        else
-          throw "pointy templateMeta: the language provides argument-schema version ${builtins.toString (schema.version or 0)}; this stdlib reads version 3 (shape)";
+        assert
+          schema.version or 0 == 3
+          || throw "pointy templateMeta: the language provides argument-schema version ${builtins.toString (schema.version or 0)}; this stdlib reads version 3 (shape)";
+        schema.interfaces;
 
-      # A parameter's shape is its single description: the subject leaf
-      # (one producer) or a list of subject leaves (many, empty-allowed);
-      # every other shape is wire data.
+      # A producer parameter is a subject leaf or an array of them; every
+      # other shape is wire data.
       arityOf =
         shape:
-        if shape == null then
-          null
-        else if shape.kind == "subject" then
-          "one"
-        else if
-          shape.kind == "array" && (shape.element.kind or null) == "subject"
-        then
-          "many"
-        else
-          null;
+        {
+          subject = "one";
+          array = { subject = "many"; }.${shape.element.kind or "data"} or null;
+        }
+        .${shape.kind or "data"} or null;
     in
     builtins.mapAttrs (
       name: template:
@@ -93,18 +85,16 @@ rec {
         unknownBindings = builtins.filter (
           n: !builtins.elem n paramNames
         ) (builtins.attrNames (template.bindings or { }));
-        _validated =
-          if unknownBindings == [ ] then
-            null
-          else
-            throw (
-              "pointy.template `${name}`: "
-              + nixpkgs.lib.concatStringsSep "; " (
-                builtins.map (n: "unknown binding `${n}': not a core parameter of `${interface}'") unknownBindings
-              )
-            );
       in
-      builtins.seq _validated {
+      assert
+        unknownBindings == [ ]
+        || throw (
+          "pointy.template `${name}`: "
+          + nixpkgs.lib.concatStringsSep "; " (
+            builtins.map (n: "unknown binding `${n}': not a core parameter of `${interface}'") unknownBindings
+          )
+        );
+      {
         inherit interface params;
         output = contract.output or "out";
         subjectArity = builtins.listToAttrs (
@@ -168,27 +158,24 @@ rec {
         template = templates.${type};
         templateKind = template.pointy.type;
 
-        resolveByArity = mapSubjectRefs (ref: steps.${stepIdFromRef ref});
-
-        resolve = builtins.mapAttrs (
-          argName: value:
-          if meta.subjectArity ? ${argName} then
-            resolveByArity meta.subjectArity.${argName} value
-          else if templateKind ? fileUpload && argName == "uploaded" then
-            pkgs.stdenv.mkDerivation {
+        argRefs =
+          nixpkgs.lib.optionalAttrs (templateKind ? fileUpload) {
+            uploaded = value: pkgs.stdenv.mkDerivation {
               name = "store-ref";
               outputHashAlgo = "sha256";
               outputHashMode = "recursive";
               outputHash = value.hash;
               builder = pkgs.writeScript "fail" "exit 1";
-            }
-          else if templateKind ? download && argName == "downloaded" then
-            pkgs.fetchurl {
+            };
+          }
+          // nixpkgs.lib.optionalAttrs (templateKind ? download) {
+            downloaded = value: pkgs.fetchurl {
               inherit (value) url hash;
-            }
-          else
-            value
-        ) args;
+            };
+          }
+          // builtins.mapAttrs (_: mapSubjectRefs (ref: steps.${stepIdFromRef ref})) meta.subjectArity;
+
+        resolve = builtins.mapAttrs (argName: value: (argRefs.${argName} or (v: v)) value) args;
 
         srcDir = srcFiles + "/${id}";
 
@@ -214,14 +201,15 @@ rec {
         unknown = nixpkgs.lib.subtractLists meta.knownArgs (builtins.attrNames args);
         missing = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.requiredArgs;
         normalizedArgs =
-          if unknown != [ ] then
-            throw "pointy.${type}: unknown arg(s): ${nixpkgs.lib.concatStringsSep ", " unknown}"
-          else if missing != [ ] then
-            throw "pointy.${type}: missing required arg(s): ${nixpkgs.lib.concatStringsSep ", " missing}"
-          else
-            meta.defaults // resolvedArgs // {
-              inherit id;
-            };
+          assert
+            unknown == [ ]
+            || throw "pointy.${type}: unknown arg(s): ${nixpkgs.lib.concatStringsSep ", " unknown}";
+          assert
+            missing == [ ]
+            || throw "pointy.${type}: missing required arg(s): ${nixpkgs.lib.concatStringsSep ", " missing}";
+          meta.defaults // resolvedArgs // {
+            inherit id;
+          };
         sourceOverride =
           if hasSrcDir then
             {
@@ -372,30 +360,17 @@ rec {
   evalDependencies =
     { stepDefs, templates, metas, ... }:
     let
-      getDepIds = kind: value: builtins.map stepIdFromRef (subjectRefs kind value);
-
       directDepsOf =
         id:
         let
           stepDef = stepDefs.${id};
+          meta = metas.${stepDef.type} or { subjectArity = { }; };
+          kind = templates.${stepDef.type}.pointy.type or { };
+          deps = builtins.concatMap
+            (value: builtins.map stepIdFromRef (nixpkgs.lib.toList value))
+            (builtins.attrValues (nixpkgs.lib.intersectAttrs meta.subjectArity stepDef.args));
         in
-        if
-          metas ? ${stepDef.type}
-          && templates.${stepDef.type}.pointy.type ? derivation
-        then
-          builtins.concatLists (
-            builtins.attrValues (
-              builtins.mapAttrs (
-                argName: value:
-                if metas.${stepDef.type}.subjectArity ? ${argName} then
-                  getDepIds metas.${stepDef.type}.subjectArity.${argName} value
-                else
-                  [ ]
-              ) stepDef.args
-            )
-          )
-        else
-          [ ];
+        nixpkgs.lib.optional (kind ? derivation) deps |> builtins.concatLists;
 
       # The backend's RunStep graph walk consumes this as a set.
       transitiveDepsOf =
