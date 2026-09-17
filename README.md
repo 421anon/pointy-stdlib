@@ -29,7 +29,7 @@ The language integration is the compiler's `argumentSchema`: the library hands o
 
 ## Flake outputs
 
-- `#pointy.stepConfig` — per-template UI descriptors: the pure merge of the core argument schema (built by `pointy-certify --mode schema` over the host's own sources) with the host's presentation `bindings`. The core owns names, order, shapes, defaults, and requiredness; bindings own widgets, dropdowns, and labels. Evaluation fails on a binding that names no core parameter, an `allowedTypes` value that names no template, or a presentation override the core shape rejects. `nix eval --json '.#pointy.stepConfig'` yields the document the backend serves.
+- `#pointy.stepConfig` — the notebook's form document (`{ version = 4; templates = …; }`): every parameter becomes a field carrying the core's own facts (order, name, `required`, `default`) plus one control (`widget`) and one value shape (`shape`), so the notebook renders forms without per-template code. The core owns names, order, shapes, defaults and requiredness; bindings own widgets, dropdowns and labels. A template declares only what differs; the widget vocabulary is closed (`text`, `textarea`, `code`, `command`, `number`, `checkbox`, `select`, `tokens`, `list`, `step`, `steps`, `record`, `datetime`) and evaluation fails on a binding that names no core parameter, an `allowedTypes` value that names no template, a presentation override the shape cannot express, an unknown widget, or a widget missing its parameter. `nix eval --json '.#pointy.stepConfig'` yields the document the backend serves.
 - `#pointy.stepDefs` / `#pointy.projects` / `#pointy.srcFiles` / `#pointy.dependencies`.
 - `#pointy.steps` / `#pointy.projectOutPaths` / `#pointy.autocomplete` — the raw buildables, the per-project output paths, and the template autocomplete hooks.
 
@@ -37,6 +37,8 @@ Each output above is read by the notebook backend; anything it does not read is 
 
 Records and every host-side argument map are keyed by the core schema's `parameter` name. Templates declare `contract.interface` (and optionally `contract.output`, default `"out"`) plus presentation `bindings`; `compile` receives the resolved args. A binding nests one level per shape layer: a list's knobs live under `list`, a record's under `record` (its fields under `record.fields.<name>`), and `allowedTypes`/`quickCreate` sit on the subject leaf itself.
 
-`pointy-stdlib.lib` is the host-facing surface: `mkFlake`, `loadDir`, `csvExtras`, `fastqExtras`.
+The step envelope is the library's, not the template's: `compile { lib, pkgs, pointyLib }` returns `{ build = { args, public }: { name?; version?; env?; mkDerivation; passthru?; }; }`, and `evalSteps` supplies the `pname` (the step's type unless the template names one), `version = "1"`, the `trotterPackage` marker and the metadata every step carries (`meta.pointy.id`/`type`/`requirements`/`args`). A template declares only what makes it different: `requirements` as an attrset — or a function of the resolved args — merged over `{ ram = "1G"; cpu = 1; ior = "0"; iow = "0"; }`, and `extras = "csv"` or `"fastq"` to have the matching artifact scan attached to its metadata. `nixDepPkgs` resolves `nixDeps` names against the one `pkgs`; `stepLinkCommands` links step dependencies into a build directory under their step ids.
+
+`pointy-stdlib.lib` is the host-facing surface: `mkFlake`, `loadDir`, `csvExtras`, `fastqExtras`, `nixDepPkgs`, `stepLinkCommands`.
 
 See [Setting Up the User Repository](https://github.com/421anon/pointy/blob/main/docs/pages/user-repo-setup.md) for a minimal `flake.nix` and template examples.

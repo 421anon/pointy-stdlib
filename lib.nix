@@ -7,7 +7,7 @@
 rec {
   types = import ./lib/types.nix { inherit nixpkgs; };
 
-  renderStepConfig = (import ./lib/step-config.nix { inherit (nixpkgs) lib; inherit arityOf; }).renderStepConfig;
+  renderStepConfig = (import ./lib/step-config.nix { inherit (nixpkgs) lib; }).renderStepConfig;
 
   api = {
     inherit
@@ -15,8 +15,25 @@ rec {
       loadDir
       csvExtras
       fastqExtras
+      nixDepPkgs
+      stepLinkCommands
       ;
   };
+
+  nixDepPkgs =
+    { pkgs, nixDeps }:
+    map (
+      name:
+      let
+        path = nixpkgs.lib.splitString "." name;
+      in
+      assert nixpkgs.lib.assertMsg (nixpkgs.lib.hasAttrByPath path pkgs) "Unknown Nix package `${name}`.";
+      nixpkgs.lib.getAttrFromPath path pkgs
+    ) nixDeps;
+
+  stepLinkCommands =
+    { stepDeps }:
+    builtins.concatStringsSep "\n" (map (depPkg: "ln -s ${depPkg} ./${depPkg.meta.pointy.id}") stepDeps);
 
   stepIdFromRef = stepRef: builtins.toString stepRef.step;
 
@@ -132,6 +149,10 @@ rec {
         ior = "0";
         iow = "0";
       };
+      extrasFor = {
+        csv = csvExtras;
+        fastq = fastqExtras;
+      };
     in
     stepDefs
     |> builtins.mapAttrs (
@@ -182,11 +203,19 @@ rec {
               p: p.arity == "many" && !(resolve ? ${p.param})
             ) meta.params)
           );
+        declaredRequirements = template.requirements or { };
         resolvedRequirements =
           if requirements != null then
             requirements
           else
-            (template.requirements or (_: defaultRequirements)) resolvedArgs;
+            let
+              declared =
+                if builtins.isFunction declaredRequirements then
+                  declaredRequirements resolvedArgs
+                else
+                  declaredRequirements;
+            in
+            defaultRequirements // declared;
         unknown = nixpkgs.lib.subtractLists meta.knownArgs (builtins.attrNames args);
         missing = nixpkgs.lib.subtractLists (builtins.attrNames args) meta.requiredArgs;
         normalizedArgs =
@@ -212,10 +241,22 @@ rec {
           args = normalizedArgs;
           public = result;
         };
+        stepName = cfg.name or type;
+        stepVersion = cfg.version or "1";
+        extras = nixpkgs.lib.optionalAttrs (template ? extras) {
+          extras =
+            (extrasFor.${template.extras}
+              or (throw "pointy.${type}: unknown extras kind `${template.extras}`"))
+              {
+                inherit pkgs;
+                baseDrv = result;
+              };
+        };
         result = pkgs.stdenv.mkDerivation (
           {
-            pname = cfg.name or type;
-            version = cfg.version or "";
+            pname = stepName;
+            version = stepVersion;
+            trotterPackage = "true";
           }
           // (cfg.env or { })
           // (cfg.mkDerivation or { })
@@ -224,15 +265,15 @@ rec {
       in
       result
       // {
-        name = cfg.name or type;
-        version = cfg.version or "";
+        name = stepName;
+        version = stepVersion;
         requirements = resolvedRequirements;
         meta = (result.meta or { }) // {
           pointy = (result.meta.pointy or { }) // {
             inherit id type;
             requirements = resolvedRequirements;
             args = resolvedArgs;
-          };
+          } // extras;
         };
       }
     );
@@ -316,16 +357,7 @@ rec {
     builtins.mapAttrs (id: stepDef: stepDef // { id = nixpkgs.lib.toIntBase10 id; }) stepDefs;
 
   evalProjectOutPaths =
-    args@{
-      steps,
-      projects,
-      stepDefs,
-      templates,
-      ...
-    }:
-    let
-      projects = evalProjects args;
-    in
+    { steps, projects }:
     builtins.mapAttrs (
       _: proj:
       builtins.listToAttrs
@@ -355,11 +387,13 @@ rec {
           stepDef = stepDefs.${id};
           meta = metas.${stepDef.type} or { subjectArity = { }; };
           kind = templates.${stepDef.type}.pointy.type or { };
-          deps = builtins.concatMap
-            (value: builtins.map stepIdFromRef (nixpkgs.lib.toList value))
-            (builtins.attrValues (nixpkgs.lib.intersectAttrs meta.subjectArity stepDef.args));
         in
-        nixpkgs.lib.optional (kind ? derivation) deps |> builtins.concatLists;
+        if kind ? derivation then
+          builtins.concatMap
+            (value: builtins.map stepIdFromRef (nixpkgs.lib.toList value))
+            (builtins.attrValues (nixpkgs.lib.intersectAttrs meta.subjectArity stepDef.args))
+        else
+          [ ];
 
       # The backend's RunStep graph walk consumes this as a set.
       transitiveDepsOf =

@@ -1,157 +1,270 @@
-# Renders the notebook's stepConfig document from the core tables
-# (`templateMeta`) plus each template's presentation bindings.
-{ lib, arityOf }:
+{ lib }:
 let
-  baseKeys = [ "description" "displayName" ];
-
-  # An artifact position: the subject leaf, or the ordered list of
-  # subject leaves whose empty form is legal.
-  isSubject = shape: arityOf shape != null;
-
-  allowedKeys =
+  keysFor =
     shape:
     {
-      # A checkbox carries no presentation knobs.
-      scalar = { boolean = [ ]; }.${shape.scalar or "data"} or [ "display" "autocomplete" ];
-      subject = [ "allowedTypes" "quickCreate" ];
-      choice = [ "enumDisplayNames" ];
-      array = [ "list" ];
-      record = [ "record" ];
+      scalar = [ "description" "displayName" "widget" "autocomplete" "readOnly" "path" ];
+      subject = [ "description" "displayName" "widget" "allowedTypes" "quickCreate" ];
+      choice = [ "description" "displayName" "widget" "enumDisplayNames" ];
+      array = [ "description" "displayName" "widget" "list" ];
+      record = [ "description" "displayName" "record" ];
     }
     .${shape.kind or "data"} or [ ];
 
-  stepAttrs = b:
-    lib.optionalAttrs (b ? allowedTypes) { inherit (b) allowedTypes; }
-    // lib.optionalAttrs (b.quickCreate or false) { quickCreate = true; };
+  checkKeys =
+    path: shape: b:
+    let
+      unknown = builtins.filter (k: !builtins.elem k (keysFor shape)) (builtins.attrNames b);
+    in
+    assert
+      unknown == [ ]
+      || throw "pointy template: unknown override(s) at ${path}: ${lib.concatStringsSep ", " unknown}";
+    b;
 
-  stringAttrs = b:
-    { display = b.display or { }; }
-    // lib.optionalAttrs (b ? autocomplete) { inherit (b) autocomplete; };
+  widgetParams = {
+    text = {
+      required = [ ];
+      optional = [ "hook" ];
+    };
+    textarea = {
+      required = [ ];
+      optional = [ ];
+    };
+    code = {
+      required = [ "language" ];
+      optional = [ ];
+    };
+    command = {
+      required = [ "prefix" ];
+      optional = [ ];
+    };
+    number = {
+      required = [ ];
+      optional = [ ];
+    };
+    checkbox = {
+      required = [ ];
+      optional = [ ];
+    };
+    select = {
+      required = [ ];
+      optional = [ ];
+    };
+    tokens = {
+      required = [ ];
+      optional = [ "hook" ];
+    };
+    list = {
+      required = [ ];
+      optional = [ ];
+    };
+    step = {
+      required = [ ];
+      optional = [ ];
+    };
+    steps = {
+      required = [ ];
+      optional = [ ];
+    };
+    record = {
+      required = [ ];
+      optional = [ ];
+    };
+    datetime = {
+      required = [ ];
+      optional = [ ];
+    };
+  };
 
-  # core shape -> notebook wire type.  An artifact position renders as the
-  # notebook's step descriptor; every other shape renders by its wire form.
-  wireType =
+  widgetsFor =
+    shape:
+    let
+      kind = shape.kind or "data";
+    in
+    if kind == "subject" then
+      [ "step" ]
+    else if kind == "choice" then
+      [ "select" ]
+    else if kind == "record" then
+      [ "record" ]
+    else if kind == "array" then
+      if (shape.element.kind or "data") == "subject" then
+        [ "steps" ]
+      else if (shape.element.scalar or "data") == "text" then
+        [ "tokens" ]
+      else
+        [ "list" ]
+    else if (shape.scalar or "data") == "boolean" then
+      [ "checkbox" ]
+    else if (shape.scalar or "data") == "integer" then
+      [ "number" "text" ]
+    else
+      [ "text" "textarea" "code" "command" ];
+
+  widgetFor =
+    path: shape: b:
+    let
+      allowed = widgetsFor shape;
+      hook = lib.optionalAttrs (b ? autocomplete) { hook = b.autocomplete; };
+      resolved =
+        if b ? widget then
+          b.widget
+        else
+          {
+            kind = builtins.head allowed;
+          }
+          // (if builtins.elem (builtins.head allowed) [ "tokens" "text" ] then hook else { });
+      kind = resolved.kind or (throw "pointy template: widget at ${path} has no `kind`");
+      params = widgetParams.${kind} or (throw "pointy template: unknown widget `${kind}' at ${path}; known widgets: ${lib.concatStringsSep ", " (builtins.attrNames widgetParams)}");
+      unknownParams = builtins.filter (
+        k: k != "kind" && !builtins.elem k (params.required ++ params.optional)
+      ) (builtins.attrNames resolved);
+      missingParams = builtins.filter (p: !(resolved ? ${p})) params.required;
+    in
+    assert
+      builtins.elem kind allowed
+      || throw "pointy template: widget `${kind}' cannot drive the shape at ${path}; expected ${lib.concatStringsSep " or " allowed}";
+    assert
+      missingParams == [ ]
+      || throw "pointy template: widget `${kind}' at ${path} needs ${lib.concatStringsSep ", " missingParams}";
+    assert
+      unknownParams == [ ]
+      || throw "pointy template: widget `${kind}' at ${path} takes no ${lib.concatStringsSep ", " unknownParams}";
+    resolved;
+
+  shapeOf =
     path: shape: b:
     let
       kind = shape.kind or "data";
-      scalar = shape.scalar or "data";
-      unknownKeys = builtins.filter (
-        k: !builtins.elem k (baseKeys ++ allowedKeys shape)
-      ) (builtins.attrNames b);
-      wire = {
-        subject = { step = stepAttrs b; };
-        array = { list = wireType (path + ".list") shape.element (b.list or { }); };
+      scalarNames = {
+        text = "text";
+        integer = "int";
+        boolean = "bool";
+      };
+    in
+    checkKeys path shape b
+    |> (
+      _:
+      {
         scalar = {
-          text = { string = stringAttrs b; };
-          integer = { int = stringAttrs b; };
-          boolean = { bool = { }; };
-        }
-        .${scalar} or (throw "pointy core schema: scalar `${scalar}` has no notebook wire type");
+          kind = scalarNames.${shape.scalar or "text"} or "text";
+          inherit (shape) scalar;
+        };
         choice = {
-          enum = shape.values;
-          enumDisplayNames = b.enumDisplayNames or { };
+          kind = "choice";
+          options = map (v: { value = v; } // lib.optionalAttrs ((b.enumDisplayNames or { }) ? ${v}) {
+            label = b.enumDisplayNames.${v};
+          }) shape.values;
+        };
+        array = {
+          kind = "list";
+          element = valueOf (path + ".list") shape.element (b.list or { });
         };
         record =
           let
-            fields = (b.record or { }).fields or { };
-            unknownFields = builtins.filter (
-              f: !(builtins.any (x: x.name == f) shape.fields)
-            ) (builtins.attrNames fields);
+            overrides = (b.record or { }).fields or { };
+            unknown = builtins.filter (
+              f: !builtins.any (x: x.name == f) shape.fields
+            ) (builtins.attrNames overrides);
           in
           assert
-            !(b ? record) || b.record ? fields || throw "pointy template: ${path} is missing `fields`";
-          assert
-            unknownFields == [ ]
-            || throw "pointy template: unknown record field override(s) at ${path}.fields: ${builtins.concatStringsSep ", " unknownFields}";
+            unknown == [ ]
+            || throw "pointy template: unknown record field override(s) at ${path}.fields: ${lib.concatStringsSep ", " unknown}";
           {
-            record.fields = builtins.listToAttrs (
-              builtins.map
-                (f: {
-                  name = f.name;
-                  value = argType (path + ".fields." + f.name) f.shape (fields.${f.name} or { });
-                })
-                shape.fields
-            );
+            kind = "record";
+            fields = map (
+              f:
+              fieldOf (path + ".fields." + f.name) f.name { required = true; default = null; } f.shape (
+                overrides.${f.name} or { }
+              )
+            ) shape.fields;
           };
-      };
-    in
-    assert shape != null || throw "pointy core schema: parameter has no renderable shape";
-    assert
-      unknownKeys == [ ]
-      || throw "pointy template: unknown presentation override(s) at ${path}: ${builtins.concatStringsSep ", " unknownKeys}";
-    wire.${kind} or (throw "pointy core schema: unrenderable shape kind `${kind}`");
+        subject = {
+          kind = "artifact";
+          accepts = b.allowedTypes or [ ];
+          create = b.quickCreate or false;
+        };
+      }
+      .${kind} or (throw "pointy core schema: unrenderable shape kind `${kind}' at ${path}")
+    );
 
-  argType = path: shape: b:
-    {
-      description = b.description or "";
-      displayName = b.displayName or null;
-      type = wireType path shape b;
-    };
+  valueOf = path: shape: b: {
+    widget = widgetFor path shape b;
+    shape = shapeOf path shape b;
+  };
 
-  renderStepConfig = { templates, metas }:
+  fieldOf = path: name: core: shape: b: {
+    inherit name;
+    label = b.displayName or null;
+    help = b.description or "";
+    readOnly = b.readOnly or false;
+    inherit (core) required default;
+  }
+  // lib.optionalAttrs (b ? path) { inherit (b) path; }
+  // valueOf path shape b;
+
+  derivedFields =
+    kind:
+    lib.optionals (kind ? download) [
+      {
+        name = "downloadedAt";
+        label = "Downloaded at";
+        help = "UTC timestamp when the URL was downloaded";
+        readOnly = true;
+        required = false;
+        default = null;
+        path = [
+          "downloaded"
+          "downloadedAt"
+        ];
+        widget = {
+          kind = "datetime";
+        };
+        shape = {
+          kind = "text";
+          scalar = "text";
+        };
+      }
+    ];
+
+  renderTemplate =
+    name: tpl: metas:
     let
-      templateNames = builtins.attrNames templates;
-      document = builtins.mapAttrs (
-        name: tpl:
-        let
-          meta = metas.${name};
-          bindings = tpl.bindings or { };
-          paramNames = builtins.map (p: p.param) meta.params;
-          unknownBindings = builtins.filter (n: !builtins.elem n paramNames) (
-            builtins.attrNames bindings
-          );
-          # A binding may narrow a subject's template domain; a list keeps its
-          # leaves' knobs under `list`.
-          narrows =
-            p:
-            if arityOf p.shape == "many" then
-              (bindings.${p.param} or { }).list or { }
-            else
-              bindings.${p.param} or { };
-          problems = builtins.concatMap
-            (p:
-              builtins.map
-                (t: "allowedTypes value `${t}' names no template")
-                (builtins.filter
-                  (t: !builtins.elem t templateNames)
-                  ((narrows p).allowedTypes or [ ])))
-            (builtins.filter (p: isSubject p.shape) meta.params);
-          args =
-            assert
-              unknownBindings == [ ]
-              || throw (
-                "pointy.template `${name}`: "
-                + lib.concatStringsSep "; " (
-                  builtins.map (n: "unknown binding `${n}': not a core parameter of `${meta.interface}'") unknownBindings
-                )
-              );
-            assert
-              problems == [ ]
-              || throw ("pointy template `${name}`: " + builtins.concatStringsSep "; " problems);
-            builtins.listToAttrs (
-              builtins.map (p: {
-                name = p.param;
-                value = argType (meta.interface + "." + p.param) p.shape (bindings.${p.param} or { })
-                  // lib.optionalAttrs (p.default != null) { inherit (p) default; };
-              }) meta.params
-            );
-        in
-        {
-          sortKey = tpl.sortKey or null;
-          displayName = tpl.displayName or null;
-          description = tpl.description or null;
-          icon = tpl.icon or null;
-          type =
-            if tpl.pointy.type ? derivation then
-              {
-                derivation = tpl.pointy.type.derivation // { inherit args; };
-              }
-            else
-              tpl.pointy.type;
-        }
-      ) templates;
+      meta = metas.${name};
+      bindings = tpl.bindings or { };
+      kind = tpl.pointy.type;
     in
-    builtins.deepSeq document document;
+    {
+      inherit (tpl) displayName description sortKey;
+      icon = tpl.icon or null;
+      kind =
+        if kind ? derivation then
+          "derivation"
+        else if kind ? fileUpload then
+          "upload"
+        else if kind ? download then
+          "download"
+        else
+          throw "pointy template `${name}': unknown step kind";
+      fields =
+        map (
+          p:
+          fieldOf (meta.interface + "." + p.param) p.param {
+            inherit (p) required;
+            inherit (p) default;
+          } p.shape (bindings.${p.param} or { })
+        ) meta.params
+        ++ derivedFields kind;
+    }
+    // lib.optionalAttrs (kind ? derivation) { withSrcFiles = kind.derivation.withSrcFiles or false; }
+    // lib.optionalAttrs (kind ? fileUpload) { accepts = kind.fileUpload.allowedExtensions; };
+
+  renderStepConfig =
+    { templates, metas }:
+    {
+      version = 4;
+      templates = builtins.mapAttrs (name: tpl: renderTemplate name tpl metas) templates;
+    };
 in
 {
   inherit renderStepConfig;

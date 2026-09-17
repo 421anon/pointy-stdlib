@@ -55,6 +55,7 @@
               inherit (cfg.semantic) pkgs source;
             };
             inherit (kernel) metas steps;
+            projects = pointyLib.evalProjects cfg;
           in
           {
             flake.pointy =
@@ -65,12 +66,12 @@
                   inherit metas;
                 };
                 presets = evalPresets cfg;
-                projects = evalProjects cfg;
+                inherit projects;
                 stepDefs = evalStepDefs cfg;
                 srcFiles = cfg.srcFiles;
                 dependencies = evalDependencies (cfg // { inherit metas; });
                 inherit steps;
-                projectOutPaths = evalProjectOutPaths (cfg // { inherit steps; });
+                projectOutPaths = evalProjectOutPaths { inherit steps projects; };
                 autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
               };
           };
