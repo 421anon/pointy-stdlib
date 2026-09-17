@@ -59,7 +59,7 @@ let
       else if (shape.scalar or "data") == "integer" then
         [ "number" "text" ]
       else
-        [ "text" "textarea" "code" "command" ]
+        [ "text" "textarea" "code" "command" "datetime" ]
     );
 
   widgetFor =
@@ -109,7 +109,6 @@ let
       {
         scalar = {
           kind = scalarNames.${shape.scalar or "text"} or "text";
-          inherit (shape) scalar;
         };
         choice = {
           kind = "choice";
@@ -180,7 +179,6 @@ let
     };
     shape = {
       kind = "text";
-      scalar = "text";
     };
   };
 
@@ -190,7 +188,12 @@ let
       meta = metas.${name};
       bindings = tpl.bindings or { };
       kind = tpl.pointy.type;
+      unknownBindings =
+        builtins.filter (n: !builtins.elem n (map (p: p.param) meta.params)) (builtins.attrNames bindings);
     in
+    assert
+      unknownBindings == [ ]
+      || throw "pointy template `${name}': binding(s) name no core parameter: ${lib.concatStringsSep ", " unknownBindings}";
     {
       inherit (tpl) displayName description sortKey;
       icon = tpl.icon or null;
