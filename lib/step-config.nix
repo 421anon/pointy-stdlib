@@ -21,115 +21,76 @@ let
       || throw "pointy template: unknown override(s) at ${path}: ${lib.concatStringsSep ", " unknown}";
     b;
 
+  widgetKinds = [ "text" "textarea" "code" "command" "number" "checkbox" "select" "tokens" "list" "step" "steps" "record" "datetime" ];
+
   widgetParams = {
-    text = {
-      required = [ ];
-      optional = [ "hook" ];
-    };
-    textarea = {
-      required = [ ];
-      optional = [ ];
-    };
-    code = {
-      required = [ "language" ];
-      optional = [ ];
-    };
-    command = {
-      required = [ "prefix" ];
-      optional = [ ];
-    };
-    number = {
-      required = [ ];
-      optional = [ ];
-    };
-    checkbox = {
-      required = [ ];
-      optional = [ ];
-    };
-    select = {
-      required = [ ];
-      optional = [ ];
-    };
-    tokens = {
-      required = [ ];
-      optional = [ "hook" ];
-    };
-    list = {
-      required = [ ];
-      optional = [ ];
-    };
-    step = {
-      required = [ ];
-      optional = [ ];
-    };
-    steps = {
-      required = [ ];
-      optional = [ ];
-    };
-    record = {
-      required = [ ];
-      optional = [ ];
-    };
-    datetime = {
-      required = [ ];
-      optional = [ ];
-    };
+    code = [ "language" ];
+    command = [ "prefix" ];
+    text = [ "hook" ];
+    tokens = [ "hook" ];
+  };
+
+  requiredParams = {
+    code = [ "language" ];
+    command = [ "prefix" ];
   };
 
   widgetsFor =
     shape:
     let
       kind = shape.kind or "data";
+      element = shape.element or { };
     in
-    if kind == "subject" then
-      [ "step" ]
-    else if kind == "choice" then
-      [ "select" ]
-    else if kind == "record" then
-      [ "record" ]
-    else if kind == "array" then
-      if (shape.element.kind or "data") == "subject" then
-        [ "steps" ]
-      else if (shape.element.scalar or "data") == "text" then
-        [ "tokens" ]
+    {
+      subject = [ "step" ];
+      choice = [ "select" ];
+      record = [ "record" ];
+    }
+    .${kind} or (
+      if kind == "array" then
+        if (element.kind or "data") == "subject" then
+          [ "steps" ]
+        else if (element.scalar or "data") == "text" then
+          [ "tokens" ]
+        else
+          [ "list" ]
+      else if (shape.scalar or "data") == "boolean" then
+        [ "checkbox" ]
+      else if (shape.scalar or "data") == "integer" then
+        [ "number" "text" ]
       else
-        [ "list" ]
-    else if (shape.scalar or "data") == "boolean" then
-      [ "checkbox" ]
-    else if (shape.scalar or "data") == "integer" then
-      [ "number" "text" ]
-    else
-      [ "text" "textarea" "code" "command" ];
+        [ "text" "textarea" "code" "command" ]
+    );
 
   widgetFor =
     path: shape: b:
     let
       allowed = widgetsFor shape;
-      hook = lib.optionalAttrs (b ? autocomplete) { hook = b.autocomplete; };
-      resolved =
-        if b ? widget then
-          b.widget
-        else
-          {
-            kind = builtins.head allowed;
-          }
-          // (if builtins.elem (builtins.head allowed) [ "tokens" "text" ] then hook else { });
+      default =
+        {
+          kind = builtins.head allowed;
+        }
+        // lib.optionalAttrs
+          ((b ? autocomplete) && builtins.elem (builtins.head allowed) [ "tokens" "text" ])
+          { hook = b.autocomplete; };
+      resolved = b.widget or default;
       kind = resolved.kind or (throw "pointy template: widget at ${path} has no `kind`");
-      params = widgetParams.${kind} or (throw "pointy template: unknown widget `${kind}' at ${path}; known widgets: ${lib.concatStringsSep ", " (builtins.attrNames widgetParams)}");
-      unknownParams = builtins.filter (
-        k: k != "kind" && !builtins.elem k (params.required ++ params.optional)
-      ) (builtins.attrNames resolved);
-      missingParams = builtins.filter (p: !(resolved ? ${p})) params.required;
+      params = widgetParams.${kind} or [ ];
+      missing = builtins.filter (p: !(resolved ? ${p})) (requiredParams.${kind} or [ ]);
+      extra = builtins.filter (k: k != "kind" && !builtins.elem k params) (builtins.attrNames resolved);
     in
+    assert
+      builtins.elem kind widgetKinds
+      || throw "pointy template: unknown widget `${kind}' at ${path}; known widgets: ${lib.concatStringsSep ", " widgetKinds}";
     assert
       builtins.elem kind allowed
       || throw "pointy template: widget `${kind}' cannot drive the shape at ${path}; expected ${lib.concatStringsSep " or " allowed}";
     assert
-      missingParams == [ ]
-      || throw "pointy template: widget `${kind}' at ${path} needs ${lib.concatStringsSep ", " missingParams}";
+      missing == [ ]
+      || throw "pointy template: widget `${kind}' at ${path} needs ${lib.concatStringsSep ", " missing}";
     assert
-      unknownParams == [ ]
-      || throw "pointy template: widget `${kind}' at ${path} takes no ${lib.concatStringsSep ", " unknownParams}";
+      extra == [ ]
+      || throw "pointy template: widget `${kind}' at ${path} takes no ${lib.concatStringsSep ", " extra}";
     resolved;
 
   shapeOf =
@@ -203,29 +164,25 @@ let
   // lib.optionalAttrs (b ? path) { inherit (b) path; }
   // valueOf path shape b;
 
-  derivedFields =
-    kind:
-    lib.optionals (kind ? download) [
-      {
-        name = "downloadedAt";
-        label = "Downloaded at";
-        help = "UTC timestamp when the URL was downloaded";
-        readOnly = true;
-        required = false;
-        default = null;
-        path = [
-          "downloaded"
-          "downloadedAt"
-        ];
-        widget = {
-          kind = "datetime";
-        };
-        shape = {
-          kind = "text";
-          scalar = "text";
-        };
-      }
+  downloadTimestamp = {
+    name = "downloadedAt";
+    label = "Downloaded at";
+    help = "UTC timestamp when the URL was downloaded";
+    readOnly = true;
+    required = false;
+    default = null;
+    path = [
+      "downloaded"
+      "downloadedAt"
     ];
+    widget = {
+      kind = "datetime";
+    };
+    shape = {
+      kind = "text";
+      scalar = "text";
+    };
+  };
 
   renderTemplate =
     name: tpl: metas:
@@ -254,7 +211,7 @@ let
             inherit (p) default;
           } p.shape (bindings.${p.param} or { })
         ) meta.params
-        ++ derivedFields kind;
+        ++ lib.optionals (kind ? download) [ downloadTimestamp ];
     }
     // lib.optionalAttrs (kind ? derivation) { withSrcFiles = kind.derivation.withSrcFiles or false; }
     // lib.optionalAttrs (kind ? fileUpload) { accepts = kind.fileUpload.allowedExtensions; };
