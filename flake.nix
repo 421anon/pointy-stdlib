@@ -72,7 +72,7 @@
                 dependencies = evalDependencies (cfg // { inherit metas; });
                 inherit steps;
                 projectOutPaths = evalProjectOutPaths { inherit steps projects; };
-                autocomplete = evalAutocomplete <| cfg // { inherit pkgs; };
+                autocomplete = evalAutocomplete <| cfg // { pkgs = cfg.semantic.pkgs; };
               };
           };
       };
