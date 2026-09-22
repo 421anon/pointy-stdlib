@@ -11,9 +11,25 @@ let
   applications = pointyLib.evalApplications (kernel // { inherit steps; });
   subjectBindings = pointyLib.evalSubjectBindings (kernel // { inherit steps; });
   regenerated = lang.schema { entry = source; inherit extensions; };
+  producersOf = entry:
+    pkgs.lib.unique (builtins.map (edge: edge.subject) entry.subjectEdges);
+  certificates = builtins.mapAttrs (
+    id: entry:
+    lang.certificate {
+      entry = source;
+      inherit extensions applications;
+      application = entry // { key = id; };
+      output = steps.${id};
+      subjects = subjectBindings id;
+      parents = builtins.listToAttrs (builtins.map (key: {
+        name = key;
+        value = certificates.${key};
+      }) (producersOf entry));
+    }
+  ) applications;
 in
 {
-  inherit metas steps;
+  inherit metas steps certificates;
 
   schemaDrift = pkgs.runCommand "pointy-schema-check" { nativeBuildInputs = [ pkgs.diffutils ]; } ''
     if ! cmp -s ${regenerated} ${schema}; then
@@ -37,14 +53,4 @@ in
     entry = source;
     inherit extensions applications;
   };
-
-  certificates = builtins.mapAttrs (
-    id: entry:
-    lang.certificate {
-      entry = source;
-      inherit extensions applications;
-      application = entry // { key = id; };
-      subjects = subjectBindings id;
-    }
-  ) (pointyLib.evalCertifiable (kernel // { inherit applications; }));
 }

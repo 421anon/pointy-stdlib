@@ -179,10 +179,6 @@ rec {
     in
     builtins.foldl' (acc: p: acc // binding p) { } meta.subjectParams;
 
-  evalCertifiable =
-    { stepDefs, metas, applications, ... }:
-    nixpkgs.lib.filterAttrs (id: _: metas.${stepDefs.${id}.type}.subjectParams != [ ]) applications;
-
   evalSteps =
     args@{
       stepDefs,
@@ -437,6 +433,28 @@ rec {
         }
       ) proj.steps
 
+    ) projects;
+
+  evalProjectCertificates =
+    { certificates, projects }:
+    builtins.mapAttrs (
+      _: proj:
+      builtins.listToAttrs (
+        map (
+          step:
+          let
+            id = toString step.def.id;
+          in
+          {
+            name = id;
+            value =
+              let
+                tr = builtins.tryEval certificates.${id}.certificate.outPath;
+              in
+              if tr.success then tr.value else "/invalid";
+          }
+        ) proj.steps
+      )
     ) projects;
 
   evalDependencies =

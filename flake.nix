@@ -70,7 +70,7 @@
                     || throw "pointy.semantic.schema must live inside the host flake, so `pointy-schema` can regenerate it";
                   lib.removePrefix schemaPrefix schemaPath;
               };
-              inherit (kernel) metas steps;
+              inherit (kernel) metas steps certificates;
               projects = pointyLib.evalProjects {
                 inherit (cfg) projects templates presets;
                 inherit stepDefs;
@@ -87,11 +87,11 @@
                   presets = evalPresets {
                     inherit (cfg) templates presets;
                   };
-                  inherit projects stepDefs steps;
+                  inherit projects stepDefs steps certificates;
                   srcFiles = cfg.srcFiles;
                   dependencies = evalDependencies (cfg // { inherit metas stepDefs; });
-                  inherit (kernel) certificates;
                   projectOutPaths = evalProjectOutPaths { inherit steps projects; };
+                  projectCertificates = evalProjectCertificates { inherit certificates projects; };
                   autocomplete = evalAutocomplete {
                     inherit (cfg) templates;
                     pkgs = cfg.semantic.pkgs;
