@@ -141,7 +141,9 @@ let
           };
         subject = {
           kind = "artifact";
-          accepts = b.allowedTypes or [ ];
+          # Null, not [ ]: `accepts` is a Maybe (List String) on the wire, where
+          # null means any step type and [ ] would mean none.
+          accepts = b.allowedTypes or null;
           create = b.quickCreate or false;
         };
       }
