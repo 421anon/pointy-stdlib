@@ -12,8 +12,6 @@ let
   };
 in
 {
-  pointy.requirements = requirementsType;
-
   pointy.stepDef = submodule {
     options = {
       type = mkOption { type = str; };
@@ -21,10 +19,6 @@ in
       note = mkOption {
         type = str;
         default = "";
-      };
-      validationCommitHash = mkOption {
-        type = nullOr str;
-        default = null;
       };
       reviewedRevision = mkOption {
         type = nullOr str;
@@ -39,6 +33,10 @@ in
         default = "";
       };
       args = mkOption { type = attrs; };
+      refine = mkOption {
+        type = nullOr str;
+        default = null;
+      };
       requirements = mkOption {
         type = nullOr requirementsType;
         default = null;

@@ -1,8 +1,5 @@
 {
   inputs = {
-    # The compiler comes from `pointy-lang`, so this library builds it with
-    # the rev that language is locked to; hosts override with
-    # `pointy-stdlib.inputs.nixpkgs.follows = "nixpkgs"`.
     nixpkgs.follows = "pointy-lang/nixpkgs";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
@@ -25,56 +22,95 @@
     {
       lib = pointyLib.api;
 
-      flakeModules.default = top: {
-        options.pointy = {
-          stepDefs = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.stepDef; };
-          templates = top.lib.mkOption { type = top.lib.types.attrs; };
-          presets = top.lib.mkOption {
-            type = top.lib.types.attrsOf pointyLib.types.pointy.preset;
-            default = { };
-          };
-          projects = top.lib.mkOption { type = top.lib.types.attrsOf pointyLib.types.pointy.project; };
-          srcFiles = top.lib.mkOption { type = top.lib.types.raw; };
-          semantic = {
-            pkgs = top.lib.mkOption {
-              type = top.lib.types.raw;
-              description = "The one pkgs for the raw steps and the entry sources.";
+      flakeModules.default =
+        {
+          self,
+          config,
+          lib,
+          ...
+        }:
+        {
+          options.pointy = {
+            stepDefs = lib.mkOption { type = lib.types.attrsOf pointyLib.types.pointy.stepDef; };
+            templates = lib.mkOption { type = lib.types.attrs; };
+            presets = lib.mkOption {
+              type = lib.types.attrsOf pointyLib.types.pointy.preset;
+              default = { };
             };
-            source = top.lib.mkOption {
-              type = top.lib.types.raw;
-              description = "Entry program source (conventionally main.pointy).";
-            };
-          };
-        };
-
-        config =
-          let
-            cfg = top.config.pointy;
-            kernel = semantic {
-              inherit cfg;
-              inherit (cfg.semantic) pkgs source;
-            };
-            inherit (kernel) metas steps;
-            projects = pointyLib.evalProjects cfg;
-          in
-          {
-            flake.pointy =
-              with pointyLib;
-              {
-                stepConfig = renderStepConfig {
-                  inherit (cfg) templates;
-                  inherit metas;
-                };
-                presets = evalPresets cfg;
-                inherit projects;
-                stepDefs = evalStepDefs cfg;
-                srcFiles = cfg.srcFiles;
-                dependencies = evalDependencies (cfg // { inherit metas; });
-                inherit steps;
-                projectOutPaths = evalProjectOutPaths { inherit steps projects; };
-                autocomplete = evalAutocomplete <| cfg // { pkgs = cfg.semantic.pkgs; };
+            projects = lib.mkOption { type = lib.types.attrsOf pointyLib.types.pointy.project; };
+            srcFiles = lib.mkOption { type = lib.types.raw; };
+            semantic = {
+              pkgs = lib.mkOption {
+                type = lib.types.raw;
+                description = "The one pkgs for the raw steps and the entry sources.";
               };
+              source = lib.mkOption {
+                type = lib.types.raw;
+                description = "Entry program source (conventionally main.pointy).";
+              };
+              schema = lib.mkOption {
+                type = lib.types.path;
+                description = "Committed argument-schema document (conventionally pointy.schema.json); must live inside this flake so `pointy-schema` can regenerate it.";
+              };
+            };
           };
-      };
+
+          config =
+            let
+              cfg = config.pointy;
+              schemaPath = toString cfg.semantic.schema;
+              schemaPrefix = "${self.outPath}/";
+              stepDefs = pointyLib.evalStepDefs cfg;
+              kernel = semantic {
+                inherit cfg stepDefs;
+                inherit (cfg.semantic) pkgs source schema;
+                schemaRel =
+                  assert
+                    lib.hasPrefix schemaPrefix schemaPath
+                    || throw "pointy.semantic.schema must live inside the host flake, so `pointy-schema` can regenerate it";
+                  lib.removePrefix schemaPrefix schemaPath;
+              };
+              inherit (kernel) metas steps;
+              projects = pointyLib.evalProjects {
+                inherit (cfg) projects templates presets;
+                inherit stepDefs;
+              };
+            in
+            {
+              flake.pointy =
+                with pointyLib;
+                {
+                  stepConfig = renderStepConfig {
+                    inherit (cfg) templates;
+                    inherit metas;
+                  };
+                  presets = evalPresets {
+                    inherit (cfg) templates presets;
+                  };
+                  inherit projects stepDefs steps;
+                  srcFiles = cfg.srcFiles;
+                  dependencies = evalDependencies (cfg // { inherit metas stepDefs; });
+                  inherit (kernel) certificates;
+                  projectOutPaths = evalProjectOutPaths { inherit steps projects; };
+                  autocomplete = evalAutocomplete {
+                    inherit (cfg) templates;
+                    pkgs = cfg.semantic.pkgs;
+                  };
+                };
+
+              perSystem =
+                { ... }:
+                {
+                  checks = {
+                    pointy-schema = kernel.schemaDrift;
+                    pointy-applications = kernel.applicationsCheck;
+                  };
+                  apps.pointy-schema = {
+                    type = "app";
+                    program = "${kernel.schemaWriter}/bin/pointy-schema";
+                  };
+                };
+            };
+        };
     };
 }

@@ -1,19 +1,50 @@
 { pointyLib, pointy-lang }:
-{ cfg, pkgs, source }:
+{ cfg, stepDefs, pkgs, source, schema, schemaRel }:
 let
-  # mkFlake fixes the system list.
   system = "x86_64-linux";
   lang = pointy-lang.lib.forSystem { inherit system pkgs; };
-  schema = lang.argumentSchema {
-    entry = source;
-    extensions = pointy-lang.pointyExtensions.${system};
-  };
-  metas = pointyLib.templateMeta {
-    inherit (cfg) templates;
-    schema = schema.document;
-  };
-  steps = pointyLib.evalSteps (cfg // { inherit pkgs metas; });
+  extensions = pointy-lang.pointyExtensions.${system};
+  interfaces = (lang.readSchema schema).interfaces;
+  metas = pointyLib.templateMeta { inherit (cfg) templates; inherit interfaces; };
+  kernel = cfg // { inherit pkgs metas stepDefs; };
+  steps = pointyLib.evalSteps kernel;
+  applications = pointyLib.evalApplications (kernel // { inherit steps; });
+  subjectBindings = pointyLib.evalSubjectBindings (kernel // { inherit steps; });
+  regenerated = lang.schema { entry = source; inherit extensions; };
 in
 {
   inherit metas steps;
+
+  schemaDrift = pkgs.runCommand "pointy-schema-check" { nativeBuildInputs = [ pkgs.diffutils ]; } ''
+    if ! cmp -s ${regenerated} ${schema}; then
+      echo "pointy: ${schemaRel} is stale; regenerate it with nix run .#pointy-schema" >&2
+      diff -u ${schema} ${regenerated} >&2 || true
+      exit 1
+    fi
+    touch $out
+  '';
+
+  schemaWriter = pkgs.writeShellApplication {
+    name = "pointy-schema";
+    runtimeInputs = [ pkgs.coreutils pkgs.git ];
+    text = ''
+      root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+      install -Dm644 ${regenerated} "$root/${schemaRel}"
+    '';
+  };
+
+  applicationsCheck = lang.applicationsCheck {
+    entry = source;
+    inherit extensions applications;
+  };
+
+  certificates = builtins.mapAttrs (
+    id: entry:
+    lang.certificate {
+      entry = source;
+      inherit extensions applications;
+      application = entry // { key = id; };
+      subjects = subjectBindings id;
+    }
+  ) (pointyLib.evalCertifiable (kernel // { inherit applications; }));
 }
