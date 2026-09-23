@@ -62,7 +62,7 @@
       },
       "locked": {
         "lastModified": 0,
-        "narHash": "sha256-kke8x8Is4y9AFkcM/XThWEWNwrY9zf1ddPUUOVPdATM=",
+        "narHash": "sha256-eqsWlnDeltK4P7tT1Ko10nvtB8CV5zaZ+IKh9WbX0Bk=",
         "path": "/root/src/pointy-lang",
         "type": "path"
       },
