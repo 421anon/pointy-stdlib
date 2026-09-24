@@ -24,7 +24,6 @@
 
       flakeModules.default =
         {
-          self,
           config,
           lib,
           ...
@@ -48,27 +47,16 @@
                 type = lib.types.raw;
                 description = "Entry program source (conventionally main.pointy).";
               };
-              schema = lib.mkOption {
-                type = lib.types.path;
-                description = "Committed argument-schema document (conventionally pointy.schema.json); must live inside this flake so `pointy-schema` can regenerate it.";
-              };
             };
           };
 
           config =
             let
               cfg = config.pointy;
-              schemaPath = toString cfg.semantic.schema;
-              schemaPrefix = "${self.outPath}/";
               stepDefs = pointyLib.evalStepDefs cfg;
               kernel = semantic {
                 inherit cfg stepDefs;
-                inherit (cfg.semantic) pkgs source schema;
-                schemaRel =
-                  assert
-                    lib.hasPrefix schemaPrefix schemaPath
-                    || throw "pointy.semantic.schema must live inside the host flake, so `pointy-schema` can regenerate it";
-                  lib.removePrefix schemaPrefix schemaPath;
+                inherit (cfg.semantic) pkgs source;
               };
               inherit (kernel) metas steps certificates;
               projects = pointyLib.evalProjects {
@@ -102,12 +90,7 @@
                 { ... }:
                 {
                   checks = {
-                    pointy-schema = kernel.schemaDrift;
                     pointy-applications = kernel.applicationsCheck;
-                  };
-                  apps.pointy-schema = {
-                    type = "app";
-                    program = "${kernel.schemaWriter}/bin/pointy-schema";
                   };
                 };
             };
