@@ -8,16 +8,15 @@
         ]
       },
       "locked": {
-        "path": "./fixtures/flake",
+        "lastModified": 1790107439,
+        "narHash": "sha256-vTf0FsEEsHuOHR/NcXz61YIckElbOnGlbHew4nBGPSo=",
+        "path": "/root/src/pointy-lang/fixtures/flake",
         "type": "path"
       },
       "original": {
-        "path": "./fixtures/flake",
+        "path": "/root/src/pointy-lang/fixtures/flake",
         "type": "path"
-      },
-      "parent": [
-        "pointy-lang"
-      ]
+      }
     },
     "flake-parts": {
       "inputs": {
