@@ -4,7 +4,7 @@ let
     shape:
     {
       scalar = [ "description" "displayName" "widget" "autocomplete" "readOnly" "path" ];
-      subject = [ "description" "displayName" "widget" "allowedTypes" "quickCreate" ];
+      subject = [ "description" "displayName" "widget" "quickCreate" ];
       choice = [ "description" "displayName" "widget" "enumDisplayNames" ];
       array = [ "description" "displayName" "widget" "list" ];
       record = [ "description" "displayName" "record" ];
@@ -93,8 +93,11 @@ let
       || throw "pointy template: widget `${kind}' at ${path} takes no ${lib.concatStringsSep ", " extra}";
     resolved;
 
+  templateNames = interfaceTemplates: accepts:
+    builtins.concatMap (a: interfaceTemplates.${a.interface} or [ ]) accepts;
+
   shapeOf =
-    path: shape: b:
+    interfaceTemplates: path: shape: b:
     let
       kind = shape.kind or "data";
       scalarNames = {
@@ -118,7 +121,7 @@ let
         };
         array = {
           kind = "list";
-          element = valueOf (path + ".list") shape.element (b.list or { });
+          element = valueOf interfaceTemplates (path + ".list") shape.element (b.list or { });
         };
         record =
           let
@@ -134,26 +137,29 @@ let
             kind = "record";
             fields = map (
               f:
-              fieldOf (path + ".fields." + f.name) f.name { required = true; default = null; } f.shape (
+              fieldOf interfaceTemplates (path + ".fields." + f.name) f.name { required = true; default = null; } f.shape (
                 overrides.${f.name} or { }
               )
             ) shape.fields;
           };
         subject = {
           kind = "artifact";
-          accepts = b.allowedTypes or [ ];
+          accepts = templateNames interfaceTemplates shape.accepts;
+          proven = templateNames interfaceTemplates (
+            builtins.filter (a: a.verdict == "subsumed") shape.accepts
+          );
           create = b.quickCreate or false;
         };
       }
       .${kind} or (throw "pointy core schema: unrenderable shape kind `${kind}' at ${path}")
     );
 
-  valueOf = path: shape: b: {
+  valueOf = interfaceTemplates: path: shape: b: {
     widget = widgetFor path shape b;
-    shape = shapeOf path shape b;
+    shape = shapeOf interfaceTemplates path shape b;
   };
 
-  fieldOf = path: name: core: shape: b: {
+  fieldOf = interfaceTemplates: path: name: core: shape: b: {
     inherit name;
     label = b.displayName or null;
     help = b.description or "";
@@ -161,7 +167,7 @@ let
     inherit (core) required default;
   }
   // lib.optionalAttrs (b ? path) { inherit (b) path; }
-  // valueOf path shape b;
+  // valueOf interfaceTemplates path shape b;
 
   downloadTimestamp = {
     name = "downloadedAt";
@@ -183,7 +189,7 @@ let
   };
 
   renderTemplate =
-    name: tpl: metas:
+    interfaceTemplates: name: tpl: metas:
     let
       meta = metas.${name};
       bindings = tpl.bindings or { };
@@ -209,7 +215,7 @@ let
       fields =
         map (
           p:
-          fieldOf (meta.interface + "." + p.param) p.param {
+          fieldOf interfaceTemplates (meta.interface + "." + p.param) p.param {
             inherit (p) required;
             inherit (p) default;
           } p.shape (bindings.${p.param} or { })
@@ -221,9 +227,16 @@ let
 
   renderStepConfig =
     { templates, metas }:
+    let
+      interfaceTemplates = lib.foldlAttrs (
+        acc: name: meta: acc // {
+          ${meta.interface} = (acc.${meta.interface} or [ ]) ++ [ name ];
+        }
+      ) { } metas;
+    in
     {
       version = 4;
-      templates = builtins.mapAttrs (name: tpl: renderTemplate name tpl metas) templates;
+      templates = builtins.mapAttrs (name: tpl: renderTemplate interfaceTemplates name tpl metas) templates;
     };
 in
 {

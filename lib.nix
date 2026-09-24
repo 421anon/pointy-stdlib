@@ -50,8 +50,6 @@ rec {
       }
     );
 
-  # A producer parameter is a subject leaf or an array of them; every
-  # other shape is wire data.
   arityOf =
     shape:
     {
@@ -61,15 +59,7 @@ rec {
     .${shape.kind or "data"} or null;
 
   templateMeta =
-    { templates, schema }:
-    let
-      # Fail on any other version here, never as a misrendered stepConfig.
-      interfaces =
-        assert
-          schema.version or 0 == 3
-          || throw "pointy templateMeta: the language provides argument-schema version ${builtins.toString (schema.version or 0)}; this stdlib reads version 3 (shape)";
-        schema.interfaces;
-    in
+    { templates, interfaces }:
     builtins.mapAttrs (
       name: template:
       let
@@ -87,6 +77,9 @@ rec {
 
         params = builtins.map (
           sp:
+          assert
+            !(sp ? error)
+            || throw "pointy.template `${name}': the core schema reports `${sp.error}' for interface `${interface}' parameter `${sp.parameter or "?"}'";
           let
             shape = sp.shape or null;
           in
@@ -99,16 +92,10 @@ rec {
           }
         ) (iface.parameters or [ ]);
         paramNames = builtins.map (p: p.param) params;
+        subjectParams = builtins.filter (p: p.arity != null) params;
       in
       {
-        inherit interface params;
-        output = contract.output or "out";
-        subjectArity = builtins.listToAttrs (
-          builtins.map (p: {
-            name = p.param;
-            value = p.arity;
-          }) (builtins.filter (p: p.arity != null) params)
-        );
+        inherit interface params subjectParams;
         defaults = builtins.listToAttrs (
           builtins.map (p: {
             name = p.param;
@@ -123,6 +110,74 @@ rec {
           ++ specialArgs;
       }
     ) templates;
+
+  subjectRefs =
+    args: p:
+    if p.arity == "one" then
+      nixpkgs.lib.optionals (args ? ${p.param}) [ (stepIdFromRef args.${p.param}) ]
+    else
+      builtins.map stepIdFromRef (nixpkgs.lib.toList (args.${p.param} or [ ]));
+
+  applicationOf =
+    { stepDefs, metas }:
+    id:
+    let
+      def = stepDefs.${id};
+      meta = metas.${def.type};
+      refs = subjectRefs def.args;
+      argument =
+        p:
+        if p.arity == null then
+          nixpkgs.lib.optionalAttrs (def.args ? ${p.param}) { ${p.param} = def.args.${p.param}; }
+        else if p.arity == "one" then
+          nixpkgs.lib.optionalAttrs (refs p != [ ]) {
+            ${p.param} = { subject = builtins.head (refs p); };
+          }
+        else
+          { ${p.param} = if refs p == [ ] then [ ] else { subjects = refs p; }; };
+      edges =
+        p:
+        nixpkgs.lib.imap0 (i: subject: {
+          parameterPath = if p.arity == "one" then [ p.param ] else [ p.param i ];
+          inherit subject;
+        }) (refs p);
+    in
+    {
+      interface = meta.interface;
+      arguments = builtins.foldl' (acc: p: acc // argument p) { } meta.params;
+      subjectEdges = builtins.concatMap edges meta.subjectParams;
+      refinements = [ ];
+    }
+    // nixpkgs.lib.optionalAttrs ((def.refine or null) != null) { inherit (def) refine; };
+
+  evalApplications =
+    { stepDefs,
+      metas,
+      steps,
+      ...
+    }:
+    builtins.mapAttrs (id: _: applicationOf { inherit stepDefs metas; } id) (
+      nixpkgs.lib.filterAttrs (
+        id: _: (builtins.tryEval steps.${id}.outPath).success
+      ) stepDefs
+    );
+
+  evalSubjectBindings =
+    { stepDefs, metas, steps, ... }:
+    id:
+    let
+      def = stepDefs.${id};
+      meta = metas.${def.type};
+      refs = subjectRefs def.args;
+      pathsOf = p: builtins.map (ref: steps.${ref}.outPath) (refs p);
+      binding =
+        p:
+        if p.arity == "one" then
+          nixpkgs.lib.optionalAttrs (refs p != [ ]) { ${p.param} = builtins.head (pathsOf p); }
+        else
+          { ${p.param} = pathsOf p; };
+    in
+    builtins.foldl' (acc: p: acc // binding p) { } meta.subjectParams;
 
   stepSrcDir =
     { templates, srcFiles }:
@@ -198,7 +253,12 @@ rec {
               inherit (value) url hash;
             };
           }
-          // builtins.mapAttrs (_: mapSubjectRefs (ref: steps.${stepIdFromRef ref})) meta.subjectArity;
+          // builtins.listToAttrs (
+            builtins.map (p: {
+              name = p.param;
+              value = mapSubjectRefs (ref: steps.${stepIdFromRef ref}) p.arity;
+            }) meta.subjectParams
+          );
 
         resolve = builtins.mapAttrs (argName: value: (argRefs.${argName} or (v: v)) value) args;
 
@@ -295,6 +355,7 @@ rec {
       steps,
       stepDefs,
       dependencies,
+      certificates,
     }:
     builtins.mapAttrs (
       id: rawStep:
@@ -307,20 +368,25 @@ rec {
       rawStep
       // {
         def = stepDefs.${id};
+        certificate = certificates.${id}.certificate or (throw "pointy.step ${id}: no certificate");
         dependencies = dependencies.${id};
       }
       // nixpkgs.lib.optionalAttrs src.hasSrcDir { srcFiles = src.srcDir; }
     ) steps;
 
   extendProjects =
-    { projects, outPaths }:
+    { projects, outPaths, certificates }:
     builtins.mapAttrs (
       id: proj:
-      proj // { outPaths = outPaths.${id}; }
+      proj
+      // {
+        outPaths = outPaths.${id};
+        certificates = certificates.${id};
+      }
     ) projects;
 
   evalAutocomplete =
-    { templates, pkgs, ... }:
+    { templates, pkgs }:
     builtins.mapAttrs (
       _name: template:
       if template ? autocomplete then
@@ -333,7 +399,7 @@ rec {
     ) templates;
 
   evalPresets =
-    { templates, presets, ... }:
+    { templates, presets }:
     builtins.mapAttrs (
       name: preset:
       let
@@ -346,15 +412,12 @@ rec {
     ) presets;
 
   evalProjects =
-    args@{
+    {
       projects,
       templates,
       presets ? { },
-      ...
+      stepDefs,
     }:
-    let
-      stepDefs = evalStepDefs args;
-    in
     builtins.mapAttrs (
       id: proj:
       let
@@ -419,6 +482,28 @@ rec {
 
     ) projects;
 
+  evalProjectCertificates =
+    { steps, projects }:
+    builtins.mapAttrs (
+      _: proj:
+      builtins.listToAttrs (
+        map (
+          step:
+          let
+            id = toString step.def.id;
+          in
+          {
+            name = id;
+            value =
+              let
+                tr = builtins.tryEval steps.${id}.certificate.outPath;
+              in
+              if tr.success then tr.value else "/invalid";
+          }
+        ) proj.steps
+      )
+    ) projects;
+
   evalDependencies =
     { stepDefs, templates, metas, ... }:
     let
@@ -426,17 +511,14 @@ rec {
         id:
         let
           stepDef = stepDefs.${id};
-          meta = metas.${stepDef.type} or { subjectArity = { }; };
+          meta = metas.${stepDef.type} or { subjectParams = [ ]; };
           kind = templates.${stepDef.type}.pointy.type or { };
         in
         if kind ? derivation then
-          builtins.concatMap
-            (value: builtins.map stepIdFromRef (nixpkgs.lib.toList value))
-            (builtins.attrValues (nixpkgs.lib.intersectAttrs meta.subjectArity stepDef.args))
+          builtins.concatMap (subjectRefs stepDef.args) meta.subjectParams
         else
           [ ];
 
-      # The backend's RunStep graph walk consumes this as a set.
       transitiveDepsOf =
         id:
         builtins.filter (d: d != id) (
@@ -450,8 +532,6 @@ rec {
     in
     builtins.mapAttrs (id: _: transitiveDepsOf id) stepDefs;
 
-  # Scans `baseDrv` for CSV/TSV files and emits a meta.json per
-  # directory with column metadata (type + nullable).
   csvExtras =
     {
       pkgs,
@@ -472,8 +552,6 @@ rec {
     ''
     // { inherit requirements; };
 
-  # Scans `baseDrv` for FASTQ files and emits a meta.json per directory
-  # with readCount; a line count not divisible by 4 fails the build.
   fastqExtras =
     {
       pkgs,
