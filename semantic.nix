@@ -13,11 +13,11 @@ let
   subjectBindings = pointyLib.evalSubjectBindings (kernel // { inherit steps; });
   producersOf = entry:
     pkgs.lib.unique (builtins.map (edge: edge.subject) entry.subjectEdges);
+  certify = lang.certifier { entry = source; inherit extensions; };
   certificates = builtins.mapAttrs (
     id: entry:
-    lang.certificate {
-      entry = source;
-      inherit extensions applications;
+    certify {
+      inherit applications;
       application = entry // { key = id; };
       output = steps.${id};
       subjects = subjectBindings id;

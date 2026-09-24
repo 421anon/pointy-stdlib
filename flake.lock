@@ -8,15 +8,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790107439,
-        "narHash": "sha256-vTf0FsEEsHuOHR/NcXz61YIckElbOnGlbHew4nBGPSo=",
-        "path": "/root/src/pointy-lang/fixtures/flake",
+        "path": "./fixtures/flake",
         "type": "path"
       },
       "original": {
-        "path": "/root/src/pointy-lang/fixtures/flake",
+        "path": "./fixtures/flake",
         "type": "path"
-      }
+      },
+      "parent": [
+        "pointy-lang"
+      ]
     },
     "flake-parts": {
       "inputs": {
@@ -62,7 +63,7 @@
       },
       "locked": {
         "lastModified": 0,
-        "narHash": "sha256-eqsWlnDeltK4P7tT1Ko10nvtB8CV5zaZ+IKh9WbX0Bk=",
+        "narHash": "sha256-flSOhFLbjf5bbMP/BL+XG74Wt4Chx84aELj9A+WWatQ=",
         "path": "/root/src/pointy-lang",
         "type": "path"
       },
