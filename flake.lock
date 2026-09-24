@@ -9,11 +9,11 @@
       },
       "locked": {
         "dir": "fixtures/flake",
-        "lastModified": 1790253709,
-        "narHash": "sha256-i8FzbZ9tVfMCZoi+JwF7fArNudgiSGJFz0bSoAdCYpU=",
+        "lastModified": 1790270636,
+        "narHash": "sha256-oEJRLnZuJm2/nvM9IpBLPBdiA5SmJZl/pppjOCdXa70=",
         "ref": "refs/heads/master",
-        "rev": "b4ab9f8ab8279685494da9003d5f5c6315f4099f",
-        "revCount": 368,
+        "rev": "8b4a2ec0573ce4196c860ca75434dddda83f217a",
+        "revCount": 370,
         "type": "git",
         "url": "ssh://git@github.com/421anon/pointy-lang"
       },
@@ -66,11 +66,11 @@
         "pointy-lang-stdlib": "pointy-lang-stdlib"
       },
       "locked": {
-        "lastModified": 1790253709,
-        "narHash": "sha256-i8FzbZ9tVfMCZoi+JwF7fArNudgiSGJFz0bSoAdCYpU=",
+        "lastModified": 1790270636,
+        "narHash": "sha256-oEJRLnZuJm2/nvM9IpBLPBdiA5SmJZl/pppjOCdXa70=",
         "ref": "refs/heads/master",
-        "rev": "b4ab9f8ab8279685494da9003d5f5c6315f4099f",
-        "revCount": 368,
+        "rev": "8b4a2ec0573ce4196c860ca75434dddda83f217a",
+        "revCount": 370,
         "type": "git",
         "url": "ssh://git@github.com/421anon/pointy-lang"
       },
