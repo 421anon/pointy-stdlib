@@ -8,8 +8,8 @@
         ]
       },
       "locked": {
-        "lastModified": 1790107439,
-        "narHash": "sha256-vTf0FsEEsHuOHR/NcXz61YIckElbOnGlbHew4nBGPSo=",
+        "lastModified": 1790121462,
+        "narHash": "sha256-Y93irUgyJTv/EnxXlyl2cW+ivpJDN+MnefMEpO0EwkE=",
         "path": "/root/src/pointy-lang/fixtures/flake",
         "type": "path"
       },
@@ -61,11 +61,11 @@
         "pointy-lang-stdlib": "pointy-lang-stdlib"
       },
       "locked": {
-        "lastModified": 1790121764,
-        "narHash": "sha256-R/2tjcvS1VzpNPuVMBRNC09sz4PThDfwN4aIa58/sjM=",
+        "lastModified": 1790253709,
+        "narHash": "sha256-i8FzbZ9tVfMCZoi+JwF7fArNudgiSGJFz0bSoAdCYpU=",
         "ref": "refs/heads/master",
-        "rev": "a4284fcd1bc500ca8f631d2e11ff8fe9dfa0e3ec",
-        "revCount": 233,
+        "rev": "b4ab9f8ab8279685494da9003d5f5c6315f4099f",
+        "revCount": 368,
         "type": "git",
         "url": "ssh://git@github.com/421anon/pointy-lang"
       },
