@@ -6,7 +6,7 @@
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
     pointy-lang = {
-      url = "path:/root/src/pointy-lang";
+      url = "git+ssh://git@github.com/421anon/pointy-lang";
     };
   };
 

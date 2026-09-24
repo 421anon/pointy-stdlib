@@ -61,14 +61,17 @@
         "pointy-lang-stdlib": "pointy-lang-stdlib"
       },
       "locked": {
-        "lastModified": 0,
-        "narHash": "sha256-flSOhFLbjf5bbMP/BL+XG74Wt4Chx84aELj9A+WWatQ=",
-        "path": "/root/src/pointy-lang",
-        "type": "path"
+        "lastModified": 1790121764,
+        "narHash": "sha256-R/2tjcvS1VzpNPuVMBRNC09sz4PThDfwN4aIa58/sjM=",
+        "ref": "refs/heads/master",
+        "rev": "a4284fcd1bc500ca8f631d2e11ff8fe9dfa0e3ec",
+        "revCount": 233,
+        "type": "git",
+        "url": "ssh://git@github.com/421anon/pointy-lang"
       },
       "original": {
-        "path": "/root/src/pointy-lang",
-        "type": "path"
+        "type": "git",
+        "url": "ssh://git@github.com/421anon/pointy-lang"
       }
     },
     "pointy-lang-stdlib": {
