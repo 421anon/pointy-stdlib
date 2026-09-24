@@ -1,8 +1,5 @@
 {
   inputs = {
-    # The compiler comes from `pointy-lang`, so this library builds it with
-    # the rev that language is locked to; hosts override with
-    # `pointy-stdlib.inputs.nixpkgs.follows = "nixpkgs"`.
     nixpkgs.follows = "pointy-lang/nixpkgs";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
@@ -55,7 +52,15 @@
               inherit (cfg.semantic) pkgs source;
             };
             inherit (kernel) metas steps;
+            stepDefs = pointyLib.evalStepDefs cfg;
+            dependencies = pointyLib.evalDependencies (cfg // { inherit metas; });
             projects = pointyLib.evalProjects cfg;
+            publishedSteps = pointyLib.extendSteps {
+              inherit (cfg) templates srcFiles;
+              inherit steps stepDefs dependencies;
+            };
+            outPaths = pointyLib.evalProjectOutPaths { inherit steps projects; };
+            publishedProjects = pointyLib.extendProjects { inherit projects outPaths; };
           in
           {
             flake.pointy =
@@ -66,12 +71,8 @@
                   inherit metas;
                 };
                 presets = evalPresets cfg;
-                inherit projects;
-                stepDefs = evalStepDefs cfg;
-                srcFiles = cfg.srcFiles;
-                dependencies = evalDependencies (cfg // { inherit metas; });
-                inherit steps;
-                projectOutPaths = evalProjectOutPaths { inherit steps projects; };
+                steps = publishedSteps;
+                projects = publishedProjects;
                 autocomplete = evalAutocomplete <| cfg // { pkgs = cfg.semantic.pkgs; };
               };
           };

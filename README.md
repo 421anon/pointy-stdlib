@@ -30,8 +30,10 @@ The language integration is the compiler's `argumentSchema`: the library hands o
 ## Flake outputs
 
 - `#pointy.stepConfig` — the notebook's form document (`{ version = 4; templates = …; }`): every parameter becomes a field carrying the core's own facts (order, name, `required`, `default`) plus one control (`widget`) and one value shape (`shape`), so the notebook renders forms without per-template code. The core owns names, order, shapes, defaults and requiredness; bindings own widgets, dropdowns and labels. A template declares only what differs; the widget vocabulary is closed (`text`, `textarea`, `code`, `command`, `number`, `checkbox`, `select`, `tokens`, `list`, `step`, `steps`, `record`, `datetime`) and evaluation fails on a binding that names no core parameter, an `allowedTypes` value that names no template, a presentation override the shape cannot express, an unknown widget, or a widget missing its parameter. `nix eval --json '.#pointy.stepConfig'` yields the document the backend serves.
-- `#pointy.stepDefs` / `#pointy.projects` / `#pointy.srcFiles` / `#pointy.dependencies`.
-- `#pointy.steps` / `#pointy.projectOutPaths` / `#pointy.autocomplete` — the raw buildables, the per-project output paths, and the template autocomplete hooks.
+- `#pointy.steps.<id>` — the step derivation (`outPath`, `drvPath`, `meta.pointy` as before) carrying its own facts: `def` (the step's record, with its integer `id`), `dependencies` (the transitive upstream step ids), and `srcFiles` where the build links a directory in (template kind `derivation` with `withSrcFiles`, and `srcFiles/<id>` present) — the same path the unpack phase links. There is no top-level `stepDefs`, `dependencies` or `srcFiles`; they live on the step.
+- `#pointy.projects.<pid>` — the project record (`name`, `hidden`, `sortKey`, `preset`, `templates`, `steps`, `validationErrors`, `id`) extended with `outPaths.<sid>` (the step `outPath`), `/invalid` where evaluation fails, so the notebook resolves one project per evaluation. There is no top-level `projectOutPaths`; it lives on the project.
+- `#pointy.presets` — the project presets.
+- `#pointy.autocomplete` — the template autocomplete hooks.
 
 Each output above is read by the notebook backend; anything it does not read is not published.
 
