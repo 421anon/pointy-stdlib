@@ -59,9 +59,23 @@
                 inherit (cfg.semantic) pkgs source;
               };
               inherit (kernel) metas steps certificates;
+              dependencies = pointyLib.evalDependencies (cfg // { inherit metas stepDefs; });
               projects = pointyLib.evalProjects {
                 inherit (cfg) projects templates presets;
                 inherit stepDefs;
+              };
+              publishedSteps = pointyLib.extendSteps {
+                inherit (cfg) templates srcFiles;
+                inherit steps stepDefs dependencies certificates;
+              };
+              outPaths = pointyLib.evalProjectOutPaths { inherit steps projects; };
+              projectCertificates = pointyLib.evalProjectCertificates {
+                steps = publishedSteps;
+                inherit projects;
+              };
+              publishedProjects = pointyLib.extendProjects {
+                inherit projects outPaths;
+                certificates = projectCertificates;
               };
             in
             {
@@ -75,11 +89,8 @@
                   presets = evalPresets {
                     inherit (cfg) templates presets;
                   };
-                  inherit projects stepDefs steps certificates;
-                  srcFiles = cfg.srcFiles;
-                  dependencies = evalDependencies (cfg // { inherit metas stepDefs; });
-                  projectOutPaths = evalProjectOutPaths { inherit steps projects; };
-                  projectCertificates = evalProjectCertificates { inherit certificates projects; };
+                  steps = publishedSteps;
+                  projects = publishedProjects;
                   autocomplete = evalAutocomplete {
                     inherit (cfg) templates;
                     pkgs = cfg.semantic.pkgs;

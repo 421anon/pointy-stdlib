@@ -179,6 +179,21 @@ rec {
     in
     builtins.foldl' (acc: p: acc // binding p) { } meta.subjectParams;
 
+  stepSrcDir =
+    { templates, srcFiles }:
+    { id, type }:
+    let
+      srcDir = srcFiles + "/${id}";
+      kind = templates.${type}.pointy.type;
+    in
+    {
+      inherit srcDir;
+      hasSrcDir =
+        kind ? derivation
+        && (kind.derivation.withSrcFiles or false)
+        && builtins.pathExists srcDir;
+    };
+
   evalSteps =
     args@{
       stepDefs,
@@ -247,12 +262,7 @@ rec {
 
         resolve = builtins.mapAttrs (argName: value: (argRefs.${argName} or (v: v)) value) args;
 
-        srcDir = srcFiles + "/${id}";
-
-        hasSrcDir =
-          templateKind ? derivation
-          && (templateKind.derivation.withSrcFiles or false)
-          && builtins.pathExists srcDir;
+        src = stepSrcDir { inherit templates srcFiles; } { inherit id type; };
         resolvedArgs =
           resolve
           // builtins.listToAttrs (
@@ -289,9 +299,9 @@ rec {
             inherit id;
           };
         sourceOverride =
-          if hasSrcDir then
+          if src.hasSrcDir then
             {
-              unpackPhase = "find ${srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
+              unpackPhase = "find ${src.srcDir} -mindepth 1 -maxdepth 1 -print0 | xargs -0 -r -I{} ln -s {} .";
             }
           else
             {
@@ -337,6 +347,43 @@ rec {
         };
       }
     );
+
+  extendSteps =
+    {
+      templates,
+      srcFiles,
+      steps,
+      stepDefs,
+      dependencies,
+      certificates,
+    }:
+    builtins.mapAttrs (
+      id: rawStep:
+      let
+        src = stepSrcDir { inherit templates srcFiles; } {
+          inherit id;
+          inherit (stepDefs.${id}) type;
+        };
+      in
+      rawStep
+      // {
+        def = stepDefs.${id};
+        certificate = certificates.${id}.certificate or (throw "pointy.step ${id}: no certificate");
+        dependencies = dependencies.${id};
+      }
+      // nixpkgs.lib.optionalAttrs src.hasSrcDir { srcFiles = src.srcDir; }
+    ) steps;
+
+  extendProjects =
+    { projects, outPaths, certificates }:
+    builtins.mapAttrs (
+      id: proj:
+      proj
+      // {
+        outPaths = outPaths.${id};
+        certificates = certificates.${id};
+      }
+    ) projects;
 
   evalAutocomplete =
     { templates, pkgs }:
@@ -436,7 +483,7 @@ rec {
     ) projects;
 
   evalProjectCertificates =
-    { certificates, projects }:
+    { steps, projects }:
     builtins.mapAttrs (
       _: proj:
       builtins.listToAttrs (
@@ -449,7 +496,7 @@ rec {
             name = id;
             value =
               let
-                tr = builtins.tryEval certificates.${id}.certificate.outPath;
+                tr = builtins.tryEval steps.${id}.certificate.outPath;
               in
               if tr.success then tr.value else "/invalid";
           }
