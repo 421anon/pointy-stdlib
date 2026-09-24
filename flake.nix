@@ -7,6 +7,8 @@
     };
     pointy-lang = {
       url = "git+ssh://git@github.com/421anon/pointy-lang";
+      inputs.fixtures.url = "git+ssh://git@github.com/421anon/pointy-lang?dir=fixtures/flake";
+      inputs.pointy-lang-stdlib.url = "git+ssh://git@github.com/421anon/pointy-lang-stdlib";
     };
   };
 

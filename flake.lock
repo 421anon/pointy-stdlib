@@ -2,20 +2,22 @@
   "nodes": {
     "fixtures": {
       "inputs": {
-        "nixpkgs": [
-          "pointy-lang",
-          "nixpkgs"
-        ]
+        "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1790121462,
-        "narHash": "sha256-Y93irUgyJTv/EnxXlyl2cW+ivpJDN+MnefMEpO0EwkE=",
-        "path": "/root/src/pointy-lang/fixtures/flake",
-        "type": "path"
+        "dir": "fixtures/flake",
+        "lastModified": 1790253709,
+        "narHash": "sha256-i8FzbZ9tVfMCZoi+JwF7fArNudgiSGJFz0bSoAdCYpU=",
+        "ref": "refs/heads/master",
+        "rev": "b4ab9f8ab8279685494da9003d5f5c6315f4099f",
+        "revCount": 368,
+        "type": "git",
+        "url": "ssh://git@github.com/421anon/pointy-lang"
       },
       "original": {
-        "path": "/root/src/pointy-lang/fixtures/flake",
-        "type": "path"
+        "dir": "fixtures/flake",
+        "type": "git",
+        "url": "ssh://git@github.com/421anon/pointy-lang"
       }
     },
     "flake-parts": {
@@ -54,10 +56,26 @@
         "type": "github"
       }
     },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1767012506,
+        "narHash": "sha256-bkTWmsS12pVUOvzS0/9+zDJeBENbMdcIqtwrEVgv2SY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ced569a0a24151f1259a82b30845839d342db58b",
+        "type": "github"
+      }
+    },
     "pointy-lang": {
       "inputs": {
         "fixtures": "fixtures",
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": "nixpkgs_2",
         "pointy-lang-stdlib": "pointy-lang-stdlib"
       },
       "locked": {
@@ -77,14 +95,17 @@
     "pointy-lang-stdlib": {
       "flake": false,
       "locked": {
-        "lastModified": 1788956473,
-        "narHash": "sha256-FgYmDElFEDtqHkCgj9UEoCWfud1z+kTCMa3jlUsD9Ok=",
-        "path": "/root/src/pointy-lang-stdlib",
-        "type": "path"
+        "lastModified": 1788954413,
+        "narHash": "sha256-DW7S594iK9mNF21OzKTbcSFfiZ4G0viaInAc/LJrWtY=",
+        "ref": "refs/heads/master",
+        "rev": "946914ad96b987d7d4125f942bb0618f6e0d6af5",
+        "revCount": 13,
+        "type": "git",
+        "url": "ssh://git@github.com/421anon/pointy-lang-stdlib"
       },
       "original": {
-        "path": "/root/src/pointy-lang-stdlib",
-        "type": "path"
+        "type": "git",
+        "url": "ssh://git@github.com/421anon/pointy-lang-stdlib"
       }
     },
     "root": {
