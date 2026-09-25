@@ -33,6 +33,7 @@ in
 
   applicationsCheck = lang.applicationsCheck {
     entry = source;
-    inherit extensions applications;
+    inherit extensions;
+    applications = pkgs.lib.filterAttrs (id: _: (builtins.tryEval steps.${id}.outPath).success) applications;
   };
 }

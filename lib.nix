@@ -153,14 +153,9 @@ rec {
   evalApplications =
     { stepDefs,
       metas,
-      steps,
       ...
     }:
-    builtins.mapAttrs (id: _: applicationOf { inherit stepDefs metas; } id) (
-      nixpkgs.lib.filterAttrs (
-        id: _: (builtins.tryEval steps.${id}.outPath).success
-      ) stepDefs
-    );
+    builtins.mapAttrs (id: _: applicationOf { inherit stepDefs metas; } id) stepDefs;
 
   evalSubjectBindings =
     { stepDefs, metas, steps, ... }:
