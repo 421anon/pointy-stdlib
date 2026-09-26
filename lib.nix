@@ -367,28 +367,6 @@ rec {
       }
     );
 
-  extendSteps =
-    {
-      srcDirOf,
-      steps,
-      stepDefs,
-      dependencies,
-      certificates,
-    }:
-    builtins.mapAttrs (
-      id: rawStep:
-      let
-        src = srcDirOf id;
-      in
-      rawStep
-      // {
-        def = stepDefs.${id};
-        certificate = certificates.${id}.certificate or (throw "pointy.step ${id}: no certificate");
-        dependencies = dependencies.${id};
-      }
-      // nixpkgs.lib.optionalAttrs src.hasSrcDir { srcFiles = src.srcDir; }
-    ) steps;
-
   evalAutocomplete =
     { templates, pkgs }:
     builtins.mapAttrs (
@@ -570,7 +548,7 @@ rec {
           globalSrc = copyPaths { inherit src; paths = globalPaths; };
           cfg = import (globalSrc + "/pointy.nix") {
             lib = nixpkgs.lib;
-            inherit (args) inputs;
+            inputs = builtins.removeAttrs args.inputs [ "self" ];
           };
         in
         {

@@ -21,13 +21,13 @@ pointy-stdlib.lib.mkFlake { inherit inputs; }
 
 `mkFlake` copies `flake.nix`, `pointy.nix`, `templates/`, `packages/` and `main.pointy` into one store path — the global source — and imports `pointy.nix` from that copy, so every relative path a repository configures resolves inside it. The step definitions (`steps/`), the projects, the presets and the step source directories are read from the repository itself, one store path per step.
 
-A repository that needs flake-parts configuration of its own passes it as `modules`:
+A repository that needs flake-parts configuration of its own passes it as `modules`, where the loaded `pointy.nix` result is available as `pointyRepo.cfg`:
 
 ```nix
 inputs@{ pointy-stdlib, ... }:
 pointy-stdlib.lib.mkFlake {
   inherit inputs;
-  modules = [ { perSystem = { ... }: { packages.example = pointy.pkgs.hello; }; } ];
+  modules = [ { perSystem = { ... }: { packages.example = pointyRepo.cfg.pkgs.hello; }; } ];
 }
 ```
 
