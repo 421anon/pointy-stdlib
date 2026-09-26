@@ -5,8 +5,6 @@
   ...
 }:
 rec {
-  types = import ./lib/types.nix { inherit nixpkgs; };
-
   renderStepConfig = (import ./lib/step-config.nix { inherit (nixpkgs) lib; }).renderStepConfig;
 
   api = {
@@ -19,6 +17,31 @@ rec {
       stepLinkCommands
       ;
   };
+
+  copyPaths =
+    { src, paths }:
+    let
+      ancestors =
+        path:
+        let
+          parts = nixpkgs.lib.splitString "/" path;
+        in
+        nixpkgs.lib.genList (i: nixpkgs.lib.concatStringsSep "/" (nixpkgs.lib.take (i + 1) parts)) (
+          builtins.length parts
+        );
+      included = builtins.concatMap ancestors paths;
+      relative =
+        path: nixpkgs.lib.removePrefix (toString src + "/") (toString path);
+    in
+    builtins.path {
+      path = src;
+      name = "pointy-src";
+      filter =
+        path: _:
+          path == src
+          || builtins.elem (relative path) included
+          || builtins.any (p: nixpkgs.lib.hasPrefix (p + "/") (relative path)) included;
+    };
 
   nixDepPkgs =
     { pkgs, nixDeps }:
@@ -122,9 +145,11 @@ rec {
     { stepDefs, metas }:
     id:
     let
-      def = stepDefs.${id};
-      meta = metas.${def.type};
-      refs = subjectRefs def.args;
+      def = stepDefs.${id} or (throw "pointy.step ${id}: the step is not defined");
+      meta =
+        metas.${def.type}
+          or (throw "pointy.step ${id}: no template declares the type `${def.type}'");
+      refs = subjectRefs (def.args or (throw "pointy.step ${id}: the definition has no args"));
       argument =
         p:
         if p.arity == null then
@@ -161,10 +186,18 @@ rec {
     { stepDefs, metas, steps, ... }:
     id:
     let
-      def = stepDefs.${id};
-      meta = metas.${def.type};
-      refs = subjectRefs def.args;
-      pathsOf = p: builtins.map (ref: steps.${ref}.outPath) (refs p);
+      def = stepDefs.${id} or (throw "pointy.step ${id}: the step is not defined");
+      meta =
+        metas.${def.type}
+          or (throw "pointy.step ${id}: no template declares the type `${def.type}'");
+      refs = subjectRefs (def.args or (throw "pointy.step ${id}: the definition has no args"));
+      pathsOf =
+        p:
+        builtins.map (
+          ref:
+          steps.${ref}.outPath
+            or (throw "pointy.step ${id}: the producer `${ref}' is not defined")
+        ) (refs p);
       binding =
         p:
         if p.arity == "one" then
@@ -174,27 +207,12 @@ rec {
     in
     builtins.foldl' (acc: p: acc // binding p) { } meta.subjectParams;
 
-  stepSrcDir =
-    { templates, srcFiles }:
-    { id, type }:
-    let
-      srcDir = srcFiles + "/${id}";
-      kind = templates.${type}.pointy.type;
-    in
-    {
-      inherit srcDir;
-      hasSrcDir =
-        kind ? derivation
-        && (kind.derivation.withSrcFiles or false)
-        && builtins.pathExists srcDir;
-    };
-
   evalSteps =
     args@{
       stepDefs,
       templates,
       pkgs,
-      srcFiles,
+      srcDirOf,
       metas,
       ...
     }:
@@ -221,16 +239,17 @@ rec {
     in
     stepDefs
     |> builtins.mapAttrs (
-      id:
-      {
-        type,
-        args,
-        requirements ? null,
-        ...
-      }:
+      id: def:
       let
-        meta = metas.${type};
-        template = templates.${type};
+        type = def.type or (throw "pointy.step ${id}: the definition has no type");
+        args = def.args or (throw "pointy.step ${id}: the definition has no args");
+        requirements = def.requirements or null;
+        meta =
+          metas.${type}
+            or (throw "pointy.step ${id}: no template declares the type `${type}'");
+        template =
+          templates.${type}
+            or (throw "pointy.step ${id}: the repository has no template `${type}'");
         templateKind = template.pointy.type;
 
         argRefs =
@@ -251,13 +270,18 @@ rec {
           // builtins.listToAttrs (
             builtins.map (p: {
               name = p.param;
-              value = mapSubjectRefs (ref: steps.${stepIdFromRef ref}) p.arity;
+              value =
+                mapSubjectRefs (
+                  ref:
+                  steps.${stepIdFromRef ref}
+                    or (throw "pointy.step ${id}: the producer `${stepIdFromRef ref}' is not defined")
+                ) p.arity;
             }) meta.subjectParams
           );
 
         resolve = builtins.mapAttrs (argName: value: (argRefs.${argName} or (v: v)) value) args;
 
-        src = stepSrcDir { inherit templates srcFiles; } { inherit id type; };
+        src = srcDirOf id;
         resolvedArgs =
           resolve
           // builtins.listToAttrs (
@@ -345,8 +369,7 @@ rec {
 
   extendSteps =
     {
-      templates,
-      srcFiles,
+      srcDirOf,
       steps,
       stepDefs,
       dependencies,
@@ -355,10 +378,7 @@ rec {
     builtins.mapAttrs (
       id: rawStep:
       let
-        src = stepSrcDir { inherit templates srcFiles; } {
-          inherit id;
-          inherit (stepDefs.${id}) type;
-        };
+        src = srcDirOf id;
       in
       rawStep
       // {
@@ -368,17 +388,6 @@ rec {
       }
       // nixpkgs.lib.optionalAttrs src.hasSrcDir { srcFiles = src.srcDir; }
     ) steps;
-
-  extendProjects =
-    { projects, outPaths, certificates }:
-    builtins.mapAttrs (
-      id: proj:
-      proj
-      // {
-        outPaths = outPaths.${id};
-        certificates = certificates.${id};
-      }
-    ) projects;
 
   evalAutocomplete =
     { templates, pkgs }:
@@ -404,6 +413,10 @@ rec {
         throw "Preset `${name}` references unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknown}."
       else
         preset
+        // {
+          description = preset.description or null;
+          sortKey = preset.sortKey or null;
+        }
     ) presets;
 
   evalProjects =
@@ -416,18 +429,20 @@ rec {
     builtins.mapAttrs (
       id: proj:
       let
-        hasPreset = proj.preset != null;
-        hasTemplates = proj.templates != null;
+        preset = proj.preset or null;
+        declaredTemplates = proj.templates or null;
+        hasPreset = preset != null;
+        hasTemplates = declaredTemplates != null;
         unknownTemplates =
-          if hasTemplates then builtins.filter (t: !(templates ? ${t})) proj.templates else [ ];
+          if hasTemplates then builtins.filter (t: !(templates ? ${t})) declaredTemplates else [ ];
         knownSteps = builtins.filter (s: stepDefs ? ${toString s.id}) proj.steps;
         unknownStepIds = map (s: toString s.id) (
           builtins.filter (s: !(stepDefs ? ${toString s.id})) proj.steps
         );
         validationErrors =
           nixpkgs.lib.optional (
-            hasPreset && !(presets ? ${proj.preset})
-          ) "Unknown preset `${proj.preset}`. Pick another preset in the edit form."
+            hasPreset && !(presets ? ${preset})
+          ) "Unknown preset `${preset}`. Pick another preset in the edit form."
           ++
             nixpkgs.lib.optional (hasTemplates && unknownTemplates != [ ])
               "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
@@ -442,6 +457,8 @@ rec {
       else
         proj
         // {
+          inherit preset;
+          templates = declaredTemplates;
           id = nixpkgs.lib.toIntBase10 id;
           steps = map (step: {
             def = stepDefs.${toString step.id};
@@ -454,50 +471,6 @@ rec {
   evalStepDefs =
     { stepDefs, ... }:
     builtins.mapAttrs (id: stepDef: stepDef // { id = nixpkgs.lib.toIntBase10 id; }) stepDefs;
-
-  evalProjectOutPaths =
-    { steps, projects }:
-    builtins.mapAttrs (
-      _: proj:
-      builtins.listToAttrs
-      <| map (
-        step:
-        let
-          id = toString step.def.id;
-        in
-        {
-          name = id;
-          value =
-            let
-              tr = builtins.tryEval steps.${id}.outPath;
-            in
-            if tr.success then tr.value else "/invalid";
-        }
-      ) proj.steps
-
-    ) projects;
-
-  evalProjectCertificates =
-    { steps, projects }:
-    builtins.mapAttrs (
-      _: proj:
-      builtins.listToAttrs (
-        map (
-          step:
-          let
-            id = toString step.def.id;
-          in
-          {
-            name = id;
-            value =
-              let
-                tr = builtins.tryEval steps.${id}.certificate.outPath;
-              in
-              if tr.success then tr.value else "/invalid";
-          }
-        ) proj.steps
-      )
-    ) projects;
 
   evalDependencies =
     { stepDefs, templates, metas, ... }:
@@ -581,14 +554,35 @@ rec {
             };
           };
         };
-    in
-    args: userModule:
-    flake-parts.lib.mkFlake (withDefaultNixpkgs args) {
-      imports = [
-        self.flakeModules.default
-        userModule
+
+      globalPaths = [
+        "flake.nix"
+        "pointy.nix"
+        "templates"
+        "packages"
+        "main.pointy"
       ];
 
+      loadRepo =
+        args:
+        let
+          src = args.src or args.inputs.self.outPath;
+          globalSrc = copyPaths { inherit src; paths = globalPaths; };
+          cfg = import (globalSrc + "/pointy.nix") {
+            lib = nixpkgs.lib;
+            inherit (args) inputs;
+          };
+        in
+        {
+          inherit src globalSrc cfg;
+        };
+    in
+    args@{ inputs, modules ? [ ], ... }:
+    flake-parts.lib.mkFlake (withDefaultNixpkgs (builtins.intersectAttrs { inherit inputs; nixpkgs = null; } args)) {
+      imports = [ self.flakeModules.default ] ++ modules;
+
       systems = [ "x86_64-linux" ];
+
+      _module.args.pointyRepo = loadRepo args;
     };
 }
