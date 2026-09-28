@@ -153,7 +153,9 @@ rec {
       argument =
         p:
         if p.arity == null then
-          nixpkgs.lib.optionalAttrs (def.args ? ${p.param}) { ${p.param} = def.args.${p.param}; }
+          nixpkgs.lib.optionalAttrs (
+            def.args ? ${p.param} && (p.default == null || def.args.${p.param} != p.default)
+          ) { ${p.param} = def.args.${p.param}; }
         else if p.arity == "one" then
           nixpkgs.lib.optionalAttrs (refs p != [ ]) {
             ${p.param} = { subject = builtins.head (refs p); };
@@ -174,6 +176,27 @@ rec {
       refinements = [ ];
     }
     // nixpkgs.lib.optionalAttrs ((def.refine or null) != null) { inherit (def) refine; };
+
+  rekeyApplication =
+    keys: application:
+    let
+      rekey = subject: keys.${subject} or subject;
+      argument =
+        value:
+        if value ? subject then
+          value // { subject = rekey value.subject; }
+        else if value ? subjects then
+          value // { subjects = builtins.map rekey value.subjects; }
+        else
+          value;
+    in
+    application
+    // {
+      arguments = builtins.mapAttrs (_: argument) application.arguments;
+      subjectEdges = builtins.map (
+        edge: edge // { subject = rekey edge.subject; }
+      ) application.subjectEdges;
+    };
 
   evalApplications =
     { stepDefs,

@@ -48,7 +48,10 @@
 
           stepFiles = builtins.mapAttrs (
             id: _:
-            builtins.path { path = src + "/steps/${id}.nix"; }
+            builtins.path {
+              path = src + "/steps/${id}.nix";
+              name = "step.nix";
+            }
           ) stepIdSet;
           rawDefs = builtins.mapAttrs (id: _: import stepFiles.${id}) stepIdSet;
           allStepDefs = pointyLib.evalStepDefs { stepDefs = rawDefs; };
@@ -87,7 +90,10 @@
             if usesSrcDir && builtins.pathExists dir then
               {
                 hasSrcDir = true;
-                srcDir = builtins.path { path = dir; };
+                srcDir = builtins.path {
+                  path = dir;
+                  name = "srcFiles";
+                };
               }
             else
               {
@@ -134,16 +140,37 @@
             }
           ) stepIdSet;
 
+          certKeys = builtins.mapAttrs (
+            id: _:
+            builtins.hashString "sha256" (
+              builtins.toJSON {
+                output = "${scopes.${id}.steps.${id}}";
+                application = pointyLib.rekeyApplication certKeys scopes.${id}.applications.${id};
+              }
+            )
+          ) stepIdSet;
+
           certificates = builtins.mapAttrs (
             id: _:
+            let
+              key = certKeys.${id};
+              applications =
+                scopes.${id}.applications
+                |> builtins.mapAttrs (name: application: {
+                  name = certKeys.${name};
+                  value = pointyLib.rekeyApplication certKeys application;
+                })
+                |> builtins.attrValues
+                |> builtins.listToAttrs;
+            in
             certify {
-              applications = scopes.${id}.applications;
-              application = scopes.${id}.applications.${id} // { key = id; };
+              inherit applications;
+              application = applications.${key} // { key = key; };
               output = scopes.${id}.steps.${id};
               subjects = scopes.${id}.subjectBindings id;
               parents = builtins.listToAttrs (
                 map (p: {
-                  name = p;
+                  name = certKeys.${p};
                   value = certificates.${p};
                 }) (producersOf id)
               );
