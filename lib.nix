@@ -436,9 +436,16 @@ rec {
         hasTemplates = declaredTemplates != null;
         unknownTemplates =
           if hasTemplates then builtins.filter (t: !(templates ? ${t})) declaredTemplates else [ ];
-        knownSteps = builtins.filter (s: stepDefs ? ${toString s.id}) proj.steps;
-        unknownStepIds = map (s: toString s.id) (
-          builtins.filter (s: !(stepDefs ? ${toString s.id})) proj.steps
+        isStep = child: child ? step;
+        stepIdOf = child: toString child.step.id;
+        projectIdOf = child: toString child.project.id;
+        isKnown =
+          child:
+          if isStep child then stepDefs ? ${stepIdOf child} else projects ? ${projectIdOf child};
+        unknownChildren = builtins.filter (child: !(isKnown child)) proj.children;
+        unknownStepIds = map stepIdOf (builtins.filter isStep unknownChildren);
+        unknownProjectIds = map projectIdOf (
+          builtins.filter (child: !(isStep child)) unknownChildren
         );
         validationErrors =
           nixpkgs.lib.optional (
@@ -449,7 +456,10 @@ rec {
               "Unknown templates: ${nixpkgs.lib.concatStringsSep ", " unknownTemplates}. Remove them in the edit form."
           ++ nixpkgs.lib.optional (
             unknownStepIds != [ ]
-          ) "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}.";
+          ) "Unknown step ids: ${nixpkgs.lib.concatStringsSep ", " unknownStepIds}."
+          ++ nixpkgs.lib.optional (
+            unknownProjectIds != [ ]
+          ) "Unknown project ids: ${nixpkgs.lib.concatStringsSep ", " unknownProjectIds}.";
       in
       if !hasPreset && !hasTemplates then
         throw "Project `${id}` must define either `preset` or `templates`."
@@ -461,10 +471,13 @@ rec {
           inherit preset;
           templates = declaredTemplates;
           id = nixpkgs.lib.toIntBase10 id;
-          steps = map (step: {
-            def = stepDefs.${toString step.id};
-            inherit (step) hidden sortKey;
-          }) knownSteps;
+          children = map (
+            child:
+            if isStep child then
+              { step = child.step // { def = stepDefs.${stepIdOf child}; }; }
+            else
+              child
+          ) (builtins.filter isKnown proj.children);
           inherit validationErrors;
         }
     ) projects;
