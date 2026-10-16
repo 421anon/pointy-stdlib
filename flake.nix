@@ -127,16 +127,14 @@
             id: _:
             let
               defs = defsOf (closureOf id);
-              steps = pointyLib.evalSteps {
-                stepDefs = defs;
-                inherit templates pkgs metas;
-                srcDirOf = p: srcDirs.${p};
-              };
             in
             {
-              inherit steps;
               applications = pointyLib.evalApplications { stepDefs = defs; inherit metas; };
-              subjectBindings = pointyLib.evalSubjectBindings { stepDefs = defs; inherit metas steps; };
+              subjectBindings = pointyLib.evalSubjectBindings {
+                stepDefs = defs;
+                inherit metas;
+                steps = allSteps;
+              };
             }
           ) stepIdSet;
 
@@ -144,7 +142,7 @@
             id: _:
             builtins.hashString "sha256" (
               builtins.toJSON {
-                output = "${scopes.${id}.steps.${id}}";
+                output = "${allSteps.${id}}";
                 application = pointyLib.rekeyApplication certKeys scopes.${id}.applications.${id};
               }
             )
@@ -166,7 +164,7 @@
             certify {
               inherit applications;
               application = applications.${key} // { key = key; };
-              output = scopes.${id}.steps.${id};
+              output = allSteps.${id};
               subjects = scopes.${id}.subjectBindings id;
               parents = builtins.listToAttrs (
                 map (p: {
@@ -179,7 +177,7 @@
 
           publishedSteps = builtins.mapAttrs (
             id: _:
-            scopes.${id}.steps.${id}
+            allSteps.${id}
             // {
               def = allStepDefs.${id};
               key = keys.${id};
