@@ -123,27 +123,23 @@
             inherit templates metas;
           };
 
-          scopes = builtins.mapAttrs (
-            id: _:
-            let
-              defs = defsOf (closureOf id);
-            in
-            {
-              applications = pointyLib.evalApplications { stepDefs = defs; inherit metas; };
-              subjectBindings = pointyLib.evalSubjectBindings {
-                stepDefs = defs;
-                inherit metas;
-                steps = allSteps;
-              };
-            }
-          ) stepIdSet;
+          allApplications = pointyLib.evalApplications {
+            stepDefs = allStepDefs;
+            inherit metas;
+          };
+          rekeyedApplications = builtins.mapAttrs (_: pointyLib.rekeyApplication certKeys) allApplications;
+          subjectBindings = pointyLib.evalSubjectBindings {
+            stepDefs = allStepDefs;
+            inherit metas;
+            steps = allSteps;
+          };
 
           certKeys = builtins.mapAttrs (
             id: _:
             builtins.hashString "sha256" (
               builtins.toJSON {
                 output = "${allSteps.${id}}";
-                application = pointyLib.rekeyApplication certKeys scopes.${id}.applications.${id};
+                application = rekeyedApplications.${id};
               }
             )
           ) stepIdSet;
@@ -153,10 +149,10 @@
             let
               key = certKeys.${id};
               applications =
-                scopes.${id}.applications
-                |> builtins.mapAttrs (name: application: {
+                builtins.intersectAttrs (defsOf (closureOf id)) rekeyedApplications
+                |> builtins.mapAttrs (name: value: {
                   name = certKeys.${name};
-                  value = pointyLib.rekeyApplication certKeys application;
+                  inherit value;
                 })
                 |> builtins.attrValues
                 |> builtins.listToAttrs;
@@ -165,7 +161,7 @@
               inherit applications;
               application = applications.${key} // { key = key; };
               output = allSteps.${id};
-              subjects = scopes.${id}.subjectBindings id;
+              subjects = subjectBindings id;
               parents = builtins.listToAttrs (
                 map (p: {
                   name = certKeys.${p};
@@ -211,10 +207,7 @@
               { ... }:
               {
                 checks.pointy-applications = applicationsCheck {
-                  applications = pointyLib.evalApplications {
-                    stepDefs = allStepDefs;
-                    inherit metas;
-                  };
+                  applications = allApplications;
                   steps = allSteps;
                 };
               };
