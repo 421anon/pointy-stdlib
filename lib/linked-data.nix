@@ -7,7 +7,6 @@
       metas,
       folders,
       rev,
-      steps,
       publishedSteps,
     }:
     let
@@ -169,7 +168,6 @@
           label =
             if builtins.isString name && nixpkgs.lib.trim name != "" then name else node.step;
           template = def.type or "";
-          output = builtins.tryEval (steps.${node.step}.outPath);
           derivedIris = uniqueInOrder (
             builtins.sort (a: b: a < b) (
               builtins.filter (iri: iri != nodeIri) (
@@ -188,7 +186,10 @@
             [
               {
                 predicate = "a";
-                objects = [ "prov:Entity" ];
+                objects = [
+                  "prov:Collection"
+                  "pointy:Step"
+                ];
               }
               {
                 predicate = "rdfs:label";
@@ -198,10 +199,6 @@
             ++ nixpkgs.lib.optional (builtins.isString template && template != "") {
               predicate = "pointy:template";
               objects = [ (turtle.literal template) ];
-            }
-            ++ nixpkgs.lib.optional output.success {
-              predicate = "pointy:output";
-              objects = [ (turtle.literal output.value) ];
             }
             ++ nixpkgs.lib.optional (derivedIris != [ ]) {
               predicate = "prov:wasDerivedFrom";

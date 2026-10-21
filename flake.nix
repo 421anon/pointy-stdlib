@@ -193,7 +193,6 @@
           linked = pointyLib.evalLinkedData {
             stepDefs = allStepDefs;
             inherit templates metas folders rev publishedSteps;
-            steps = allSteps;
           };
 
           allSteps = pointyLib.evalSteps {
