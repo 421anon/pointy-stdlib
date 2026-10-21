@@ -188,7 +188,7 @@
             [
               {
                 predicate = "a";
-                objects = [ "prov:Plan" ];
+                objects = [ "prov:Entity" ];
               }
               {
                 predicate = "rdfs:label";
@@ -226,14 +226,15 @@
           builtins.filter (node: nodeKey node != nodeKey start) (collect start)
         );
 
-      turtleFor =
+      subjectsFor =
         path: stepId:
-        let
-          start = {
-            inherit path;
-            step = builtins.toString stepId;
-          };
-        in
+        builtins.map describe (orderedNodes {
+          inherit path;
+          step = builtins.toString stepId;
+        });
+
+      documentOf =
+        subjects:
         builtins.unsafeDiscardStringContext (
           turtle.document {
             prefixes = [
@@ -242,9 +243,45 @@
               (turtle.prefix "schema" "https://schema.org/")
               (turtle.prefix "pointy" "https://pointy.cloud/ns#")
             ];
-            subjects = builtins.map describe (orderedNodes start);
+            inherit subjects;
           }
         );
+
+      isPercentEncoded = query: builtins.match "[A-Za-z0-9%._~!*'()-]+" query != null;
+
+      fileDocumentOf =
+        subjects:
+        { path, query }:
+        let
+          output = builtins.head subjects;
+          fileIri =
+            if isPercentEncoded query then
+              output.iri + "?path=" + query
+            else
+              throw "pointy: the file query `${query}' is not percent-encoded";
+          file = {
+            iri = fileIri;
+            clauses = [
+              {
+                predicate = "a";
+                objects = [ "prov:Entity" ];
+              }
+              {
+                predicate = "rdfs:label";
+                objects = [ (turtle.literal (nixpkgs.lib.last (nixpkgs.lib.splitString "/" path))) ];
+              }
+            ];
+          };
+          collection = output // {
+            clauses = output.clauses ++ [
+              {
+                predicate = "prov:hadMember";
+                objects = [ (turtle.iri fileIri) ];
+              }
+            ];
+          };
+        in
+        documentOf ([ file collection ] ++ builtins.tail subjects);
 
       notifiedSteps = builtins.mapAttrs (
         id: step:
@@ -268,10 +305,16 @@
           steps = builtins.listToAttrs (
             builtins.map (
               child:
-              let id = builtins.toString child.step.id; in
+              let
+                id = builtins.toString child.step.id;
+                subjects = subjectsFor folderPath id;
+              in
               {
                 name = id;
-                value = notifiedSteps.${id} // { turtle = turtleFor folderPath id; };
+                value = notifiedSteps.${id} // {
+                  turtle = documentOf subjects;
+                  fileTurtle = fileDocumentOf subjects;
+                };
               }
             ) (builtins.filter (child: child ? step) children)
           );
