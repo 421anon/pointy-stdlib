@@ -27,7 +27,7 @@
       flakeModules.default =
         { lib, pointyRepo, ... }:
         let
-          inherit (pointyRepo) src globalSrc cfg;
+          inherit (pointyRepo) src globalSrc cfg rev;
           inherit (cfg) pkgs source;
 
           loadIfPresent = dir: if builtins.pathExists dir then pointyLib.loadDir dir else { };
@@ -183,6 +183,62 @@
             // lib.optionalAttrs srcDirs.${id}.hasSrcDir { srcFiles = srcDirs.${id}.srcDir; }
           ) stepIdSet;
 
+          evaluatedProjects = pointyLib.evalProjects {
+            inherit projects templates presets;
+            stepDefs = allStepDefs;
+          };
+
+          folders = pointyLib.evalProjectFolders { projects = evaluatedProjects; };
+
+          linked = pointyLib.evalLinkedData {
+            stepDefs = allStepDefs;
+            inherit templates metas folders rev;
+            steps = allSteps;
+          };
+
+          notifiedSteps = builtins.mapAttrs (
+            id: step:
+            step
+            // {
+              meta = (step.meta or { }) // {
+                pointy = (step.meta.pointy or { }) // {
+                  notices = (step.meta.pointy.notices or [ ]) ++ linked.noticesOf id;
+                };
+              };
+            }
+          ) publishedSteps;
+
+          folderNode =
+            path: pid:
+            let
+              folderPath = if pid == "0" then [ ] else path ++ [ (folders.projectId pid) ];
+              children = folders.effectiveChildren pid;
+            in
+            {
+              steps = builtins.listToAttrs (
+                builtins.map (
+                  child:
+                  let id = builtins.toString child.step.id; in
+                  {
+                    name = id;
+                    value = notifiedSteps.${id} // { turtle = linked.turtleFor folderPath id; };
+                  }
+                ) (builtins.filter (child: child ? step) children)
+              );
+            }
+            // builtins.listToAttrs (
+              builtins.map (
+                child:
+                let id = builtins.toString child.project.id; in
+                {
+                  name = id;
+                  value = folderNode folderPath id;
+                }
+              ) (builtins.filter (child: !(child ? step)) children)
+            );
+
+          root = folderNode [ ] "0";
+
           allSteps = pointyLib.evalSteps {
             stepDefs = allStepDefs;
             inherit templates pkgs metas;
@@ -195,11 +251,10 @@
               schemaVersion = 1;
               stepConfig = pointyLib.renderStepConfig { inherit templates metas; };
               presets = pointyLib.evalPresets { inherit templates presets; };
-              steps = publishedSteps;
-              projects = pointyLib.evalProjects {
-                inherit projects templates presets;
-                stepDefs = allStepDefs;
-              };
+              steps = notifiedSteps;
+              root = root;
+              staleDependencies = linked.staleDependencies;
+              projects = evaluatedProjects;
               autocomplete = pointyLib.evalAutocomplete { inherit templates pkgs; };
             };
 
