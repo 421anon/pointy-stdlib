@@ -205,6 +205,7 @@
           config = {
             flake.pointy = {
               schemaVersion = 1;
+              agentSchema = builtins.readFile ./agent-schema.md;
               stepConfig = pointyLib.renderStepConfig { inherit templates metas; };
               presets = pointyLib.evalPresets { inherit templates presets; };
               steps = linked.steps;
