@@ -1,161 +1,138 @@
-# Pointy user-repository flake schema
+# Pointy embedded-agent flake schema
 
 Schema version: `1`. System: `x86_64-linux`.
 
-This document is the agent-facing contract for the flake a Pointy user repository exposes. Read it from the repository root:
+This is the embedded agent's reference for the user-repository flake. Read it from the repository root:
 
 ```sh
 nix eval --raw .#pointy.agentSchema
 ```
 
-The notebook backend reads the other `pointy.*` attributes. It does not read `pointy.agentSchema`; that attribute exists so agents can read this schema without guessing from examples.
+## Editable surface
 
-## Repository contract
+The backend applies only:
 
-A user repository is a Git-backed flake. `flake.nix` delegates to pointy-stdlib:
+- `steps/<numeric-id>.nix`
+- `projects/<numeric-id>.nix`
+- `srcFiles/<numeric-step-id>/<relative-path>`
 
-```nix
-{
-  inputs = {
-    pointy-stdlib.url = "github:421anon/pointy-stdlib";
-    nixpkgs.follows = "pointy-stdlib/nixpkgs";
-  };
+Edits elsewhere are discarded. Reviewed steps are read-only: their `steps/<id>.nix` and `srcFiles/<id>/` cannot be changed.
 
-  outputs = inputs@{ pointy-stdlib, ... }:
-    pointy-stdlib.lib.mkFlake { inherit inputs; };
-}
-```
+Before ending a turn that edits a step or project file, run `nix-instantiate --parse <file>` on every edited file and fix what it reports.
 
-`pointy.nix` supplies the package set and the language entry program:
+Use the sandbox for inspection and small checks only. Do not run a full step workload; finish the step file and ask the user to run it. Bash commands stop after 120 seconds unless they set a longer `timeout`. Keep scratch files and DuckDB `temp_directory` under `$HOME`, not `/tmp`.
 
-```nix
-{ inputs, ... }:
-{
-  pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
-  source = ./main.pointy;
-}
-```
+## Whole schema
 
-Required paths: `flake.nix`, `pointy.nix`, `main.pointy`, `templates/`, `steps/`, and `flake.lock`. Optional paths: `packages/`, `presets/`, `projects/`, and `srcFiles/`.
+All attributes are under `pointy` except `checks`, which is under `checks.<system>`. Step and project ids in attribute names are strings.
 
-- `templates/` and `steps/` are read from the repository. Every regular `<id>.nix` in `steps/` is a step; the filename without `.nix` is the step id.
-- `projects/` is optional; `projects/0.nix` is the root folder.
-- `presets/` is optional; every file is a preset.
-- `main.pointy` must be one file. It is not copied with its directory.
-- The global source is one store copy of `flake.nix`, `pointy.nix`, `templates/`, `packages/`, and `main.pointy`. Steps, projects, and presets are read from the repository itself.
-- Each `steps/<id>.nix` is imported alone as `step.nix`. It cannot import a sibling file or read outside its own source directory. `srcFiles/<id>/` is copied separately as `srcFiles` for templates whose kind is `derivation` with `withSrcFiles`.
-- A change to `flake.nix`, `pointy.nix`, `templates/`, `packages/`, `main.pointy`, or `flake.lock` moves the global source or lock hash and therefore every step key. A change to `steps/<id>.nix` or `srcFiles/<id>/` moves that step's key and the keys of its consumers.
-
-`mkFlake` takes `inputs`, optional `src` (defaults to the flake's own source), and optional `modules` for flake-parts configuration. Modules receive `pointyRepo` with `{ src, globalSrc, cfg, rev }`, where `cfg` is the result of `pointy.nix`. Modules may add ordinary flake outputs; they must not replace the `pointy` attributes described here.
-
-## Outputs
-
-All schema attributes are directly under `pointy`, with no system suffix.
-
-| Attribute | Type | Meaning |
+| Attribute | Shape | Embedded-agent use |
 | --- | --- | --- |
-| `pointy.schemaVersion` | integer | `1`. A repository without it predates keyed steps and certificates. |
-| `pointy.agentSchema` | string | This Markdown document. |
-| `pointy.stepConfig` | attribute set | Version 4 form document for the notebook. |
-| `pointy.steps.<id>` | derivation plus attributes | Step `<id>`, keyed by the string form of the id. |
-| `pointy.steps.<id>.def` | attribute set | The step file's record, with the integer `id` added. |
-| `pointy.steps.<id>.key` | string | Content address of the step's inputs. |
-| `pointy.steps.<id>.certificate` | attribute set | `{ model, facts, certificate }` for this step. |
+| `pointy.schemaVersion` | integer, `1` | Marks keyed steps and certificates. Read-only. |
+| `pointy.agentSchema` | string | This document. |
+| `pointy.stepConfig` | `{ version = 4; templates; }` | Valid template names, field names, defaults, and shapes. Use it to write `type` and `args`. |
+| `pointy.steps.<id>` | derivation plus the attributes below | Current evaluated step. Not an edit surface. |
+| `pointy.steps.<id>.def` | attribute set | The step file's content with the integer `id` added. |
+| `pointy.steps.<id>.key` | string | Content address used by the backend to cache status. Do not edit or reuse. |
+| `pointy.steps.<id>.certificate` | `{ model, facts, certificate }` | The build target that checks the output type. Not an edit surface. |
 | `pointy.steps.<id>.dependencies` | list of strings | Transitive upstream step ids, excluding the step itself. |
-| `pointy.steps.<id>.srcFiles` | store path | Present only when the template links a source directory and `srcFiles/<id>/` exists. |
-| `pointy.steps.<id>.requirements` | attribute set | Resolved `{ cpu, ram, ior, iow }`. |
-| `pointy.projects.<pid>` | attribute set | Evaluated folder record; `0` is the root folder. |
-| `pointy.root` | attribute set | Folder tree starting at the root folder. |
-| `pointy.staleDependencies` | list of attribute sets | Dependency references whose recorded folder path no longer holds the step. |
-| `pointy.presets` | attribute set | Preset records keyed by preset name. |
-| `pointy.autocomplete` | attribute set | Autocomplete hooks keyed by template name. |
-| `checks.x86_64-linux.pointy-applications` | derivation | `pointy check --applications` over all step records. |
+| `pointy.steps.<id>.srcFiles` | store path, optional | Store copy of `srcFiles/<id>/`; present when the template uses it and the directory exists. |
+| `pointy.steps.<id>.requirements` | `{ cpu, ram, ior, iow }` | Resolved resources after the step or template declaration. |
+| `pointy.steps.<id>.meta.pointy` | attribute set | Resolved `id` (string), `type`, `requirements`, `args`, plus `notices` and `extras` when present. |
+| `pointy.projects.<pid>` | attribute set | Evaluated project record, including `validationErrors` and `children`. |
+| `pointy.root` | attribute set | Folder tree with Turtle links. Not needed to edit files. |
+| `pointy.staleDependencies` | list | Dependency references that are stale; fix any you introduce. |
+| `pointy.presets` | attribute set | Valid values for a project's `preset`. |
+| `pointy.autocomplete` | attribute set | Field suggestion hooks. Not used to validate edits. |
+| `checks.x86_64-linux.pointy-applications` | derivation | Full application check. Not run by the embedded agent. |
 
-### `pointy.stepConfig`
+## `steps/<id>.nix`
 
-The version 4 form document:
+The file imports as one plain attribute set:
 
-```text
+```nix
 {
-  version = 4;
-  templates.<template> = {
-    displayName; description; sortKey; icon; kind; fields;
-    withSrcFiles?; accepts?;
-  };
+  type = "<template>";
+  name = "<name>";
+  args = { <parameter> = <value>; };
+  note = "<text>";
+  about = [ "https://example.org/record" ];
+  requirements = { cpu = 1; ram = "1G"; ior = "0"; iow = "0"; };
+  refine = "<type expression>";
+  reviewedRevision = "<commit>";
+  reviewedBy = "<name>";
+  reviewComments = "<text>";
 }
 ```
 
-Each field is `{ name, label, help, readOnly, required, default, widget, shape }`, plus `path` where a field addresses a nested value. `kind` is `derivation`, `upload`, or `download`. A template's `withSrcFiles` is present for derivation kinds; `accepts` is present for upload kinds.
+Only these top-level fields are interpreted:
 
-Shape kinds: `text`, `int`, `bool`, `choice` (`options`), `list` (`element`), `record` (`fields`), `artifact` (`accepts`, `proven`, `create`). Widget kinds: `text`, `textarea`, `code`, `command`, `number`, `checkbox`, `select`, `tokens`, `list`, `step`, `steps`, `record`, `datetime`.
+- `type` and `args` are required. A definition without either fails evaluation.
+- `name` is the display name.
+- `note` is free text.
+- `about` is a list of absolute `http(s)` URLs recorded beside the step. Other values are not published.
+- `requirements` replaces the template's requirements entirely; it is not merged with the defaults. Include all four fields when present.
+- `refine` is a type expression added to the step's declared output type. It affects downstream compatibility and certification, not the build derivation.
+- `reviewedRevision`, `reviewedBy`, and `reviewComments` are review metadata. The backend manages them; never add or change them.
 
-The document is generated from the language interface and template bindings. Evaluation fails on an unknown parameter binding, an override the shape cannot express, an unknown widget, or a widget missing a required parameter. Do not edit `stepConfig` by hand; change the language declaration or the template binding.
+Do not write `id`; the evaluator adds it as an integer to `def`. The filename supplies the id. Ids are sparse; a new step uses the highest existing id plus one.
 
-### `pointy.steps.<id>`
+`args` is keyed by the template parameter names from `pointy.stepConfig`. A producer parameter takes `{ step = N; }` or `{ path = [ P Q ]; step = N; }`. `path` lists project ids from a child of the root project down to the project holding step N; root `0` is never written. The path is link metadata: builds ignore it, but the backend records it and refuses an apply that introduces a stale path. A list of producers takes a list of those references. A missing producer raises `pointy.step <id>: the producer '<id>' is not defined`.
 
-`pointy.steps.<id>` is the raw step derivation and carries these additional attributes:
+A step file is imported alone. It cannot import a sibling file or read another repository path. The template name must exist; otherwise evaluation raises `pointy.step <id>: the repository has no template '<type>'`. Arguments are checked against the template: `pointy.<type>: unknown arg(s): ...` or `pointy.<type>: missing required arg(s): ...`.
 
-- `def` is the imported step record with an integer `id`. It normally holds `type`, `name`, `args`, and may hold `requirements`, `refine`, `note`, and review fields.
-- `key` is `sha256` of the JSON record `{ version, nix, lock, global, step, srcFiles, producers }`: the key format version, the Nix version, the repository's `flake.lock` hash, the global source path, the step file path, the source directory path or `null`, and the producer keys with missing producers recorded as `null`. Forcing a key for a step whose file fails to import raises that import error.
-- `dependencies` lists transitive upstream ids as strings. Builds use only the producer references in the step's own arguments.
-- `srcFiles` is the store copy of `srcFiles/<id>/` that the unpack phase links. It is absent when the template does not use a source directory or the directory is missing.
-- `requirements` is the resolved resource request. A step-level `requirements` overrides the template's declaration; otherwise the template's attribute set or function result is merged over `{ ram = "1G"; cpu = 1; ior = "0"; iow = "0"; }`.
-- `certificate` is `{ model, facts, certificate }`. `certificate` is a derivation with `out` (the canonical certificate) and `exports` (its export document). Certificates are keyed by application content, not step id, so equal steps with equal producers share a certificate. A step whose `outPath` does not evaluate has no certificate; forcing it throws.
-- `meta.pointy` carries `id` (string), `type`, `requirements`, and the resolved `args`, plus any template notices or extras.
+## `projects/<id>.nix`
 
-`args` in `meta.pointy` are resolved: defaults are applied, producer references become the producer derivations, and the step id is added as a string. A missing template, missing producer, or a definition without `type` or `args` raises a located error.
+A project file holds:
 
-A dependency reference is `{ step = N; }` or `{ path = [ P Q ]; step = N; }`. `path` lists folder ids from the root folder's child down to the folder that holds step N; the root id `0` is never written. Builds ignore `path`, so keys, outputs, and certificates do not move when it changes. The notebook keeps it current for commit-addressed permalinks.
+```nix
+{
+  name = "<name>";
+  preset = "<preset>";
+  children = [
+    { step = { id = 42; hidden = false; sortKey = null; }; }
+    { project = { id = 7; hidden = false; sortKey = null; }; }
+  ];
+}
+```
 
-### `pointy.projects.<pid>`
+- `name` is the display name.
+- Exactly one of `preset` and `templates` is required. `preset` names a key of `pointy.presets`; `templates` is a list of template names. Both or neither fails evaluation.
+- `children` entries link a step or subproject. `hidden` controls display; `sortKey` is an integer or `null`.
+- Do not write `id`; the evaluator adds it as an integer to `pointy.projects.<pid>`. The filename supplies the id; a new project uses the highest existing project id plus one.
 
-A project record holds `name`, `preset`, `templates`, `children`, `validationErrors`, and the integer `id`. Exactly one of `preset` and `templates` is non-null; defining both or neither raises an error.
+A child appears in this project only while an entry lists it. A new project file is invisible until a parent lists it; add its entry to `projects/0.nix` to place it at the top level. A step file with no project entry is unfiled.
 
-`children` keeps the file's order of tagged entries. A step child is `{ step = { id, hidden, sortKey, ... }; }` and gains that step's `def`. A project child is `{ project = { id, hidden, sortKey }; }` and remains a reference, so one folder may sit under several parents. An entry whose step or project does not exist is dropped and reported in `validationErrors`.
+`projects/0.nix` is the root project, Home. It is never a child of another project and cannot be deleted.
 
-### `pointy.root`
+A step or project may be listed in several parents. The project graph must stay a DAG; never link a project under one of its own descendants.
 
-The folder tree starts at root project `0`. Each node has `steps.<id>` for the steps linked directly in that folder, and `<pid>` for each child folder, recursively. A step value is exactly `pointy.steps.<id>` plus:
+Children display in this order: integer `sortKey` values ascending, then entries without a `sortKey`, with ties broken by id.
 
-- `turtle`: an RDF Turtle document for the artifact permalink `/artifact/<folder ids>/<id>/<commit>`. It describes a `prov:Collection` and a `pointy:Step`, with the step name, template, `prov:wasDerivedFrom` upstream artifacts, and `schema:about` links. Store paths and activity times are omitted.
-- `fileTurtle`: a function `{ path, query } -> string` for one file in that output, addressed as `/artifact/<folder ids>/<id>/<commit>?path=<query>`. `path` is the path inside the output; `query` is its percent-encoded form. A query containing any other character throws. The result describes a `prov:Entity` with the file name and lists it with `prov:hadMember`.
+An entry whose step or project file does not exist is dropped and reported in `pointy.projects.<pid>.validationErrors`. An unknown preset or template is also reported there. Fix the entry or the missing file; do not leave validation errors behind.
 
-All IRIs carry the flake's own commit (`self.rev`). Forcing `turtle` or `fileTurtle` in a flake without a committed revision throws `pointy: linked data needs a committed revision`.
+## `srcFiles/<id>/`
 
-A step linked in several folders appears in each folder node. The path recorded in a dependency selects the folder used for its permalink, not the derivation.
+`srcFiles/<id>/` is copied with the step and linked into the build working directory when the template's kind is `derivation` with `withSrcFiles`. For other templates the directory is ignored. Every file the step needs at build time belongs here.
 
-### `pointy.staleDependencies`
+Reviewed steps cannot change, so their `srcFiles/<id>/` is read-only.
 
-A list sorted by dependent step id. Each entry is `{ step = <integer dependent id>; dependency = <reference as written>; }`. A reference is stale when its recorded `path` does not resolve to a folder that directly holds the step. A stale reference evaluates exactly like `{ step = N; }`; the step's `meta.pointy.notices` gains an `info` notice naming the folder and the fallback.
+## Evaluation and apply
 
-### `pointy.presets` and `pointy.autocomplete`
+A changeset is refused when it introduces evaluation failures in the projects or steps it changes, or when it would introduce stale dependency references. Failures that already exist on the target branch do not block it. Fix the reported file and resubmit.
 
-`pointy.presets` is keyed by preset filename. Each record carries its declared fields plus `description` and `sortKey`, with `null` when absent. A preset that names an unknown template raises an error.
+Changing a step or its `srcFiles/` moves that step's key and the keys of the steps that consume it. Builds ignore a dependency reference's `path`; it only affects links and stale-reference checks. Do not treat a key or certificate as an edit handle.
 
-`pointy.autocomplete` is keyed by template name. A template without an `autocomplete` declaration gets `{}`. A declaration is called with `{ pkgs, lib }` and returns the named suggestion functions.
+The agent does not build or certify steps. After a changeset is applied, the user runs the step; the backend then reports its build and certificate status.
 
-## Inspecting the schema
+## Inspecting
 
 ```sh
 nix eval --raw .#pointy.agentSchema
-nix eval --json .#pointy.schemaVersion
 nix eval --json .#pointy.stepConfig
 nix eval --json .#pointy.projects
-nix eval --raw .#pointy.steps.42.key
 nix eval --json .#pointy.steps.42.def
-nix eval --json .#pointy.steps.42.meta.pointy
-nix eval --json .#pointy.steps.42.requirements
-nix build .#pointy.steps.42
-nix build .#pointy.steps.42.certificate
-nix build .#checks.x86_64-linux.pointy-applications
+nix eval --json .#pointy.staleDependencies
 ```
 
-Use `--raw` for strings and store paths, `--json` for records and lists.
-
-## Agent rules
-
-- Read this document before changing `flake.nix`, `pointy.nix`, `templates/`, `steps/`, or anything that consumes a `pointy.*` attribute.
-- Treat the attribute names and shapes above as the public boundary. Do not invent attributes or infer a shape from one repository's output.
-- Step ids in output attribute names are strings; `def.id` and dependency entries use integers.
-- A key or certificate is content-addressed. Do not patch a store path or reuse one across steps; change inputs and let evaluation compute a new key.
-- `pointy.agentSchema` is documentation. If it conflicts with an evaluated output, the evaluated output wins; report the conflict instead of silently adapting to it.
+Use `--raw` for strings and store paths, `--json` for records and lists. Read `pointy.stepConfig.templates.<type>.fields` for parameter names, requiredness, defaults, and shape; `shape.kind` is `text`, `int`, `bool`, `choice`, `list`, `record`, or `artifact`. An `artifact` shape lists the producer types it accepts.
