@@ -113,7 +113,7 @@ An entry whose step or project file does not exist is dropped and reported in `p
 
 ## `srcFiles/<id>/`
 
-`srcFiles/<id>/` is copied with the step and linked into the build working directory when the template's kind is `derivation` with `withSrcFiles`. For other templates the directory is ignored. Every file the step needs at build time belongs here.
+`srcFiles/<id>/` is copied with the step and linked into the build working directory when the template's kind is `derivation` with `withSrcFiles`. For other templates the directory is ignored. The step's source files belong here.
 
 Reviewed steps cannot change, so their `srcFiles/<id>/` is read-only.
 
